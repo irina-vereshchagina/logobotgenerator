@@ -116,6 +116,5 @@ async def generate_image(prompt: str) -> BytesIO:
 
 if __name__ == "__main__":
     import asyncio
-    from aiogram import executor
 
     asyncio.run(dp.start_polling(bot))
