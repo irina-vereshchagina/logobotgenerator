@@ -99,11 +99,18 @@ async def handle_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text.strip()
 
-    # Инициализация состояния пользователя
+    # Инициализация состояния
     if user_id not in user_states:
         user_states[user_id] = {"lock": asyncio.Lock(), "warned": False}
 
     lock = user_states[user_id]["lock"]
+
+    # Блокируем всё, если уже генерируется
+    if lock.locked():
+        if not user_states[user_id]["warned"]:
+            await update.message.reply_text("⏳ Генерация логотипа в процессе. Пожалуйста, подождите...")
+            user_states[user_id]["warned"] = True
+        return
 
     # Обработка кнопок
     if text == "ℹ️ Информация":
@@ -115,14 +122,7 @@ async def handle_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Если генерация уже идёт — отправляем вежливое сообщение
-    if lock.locked():
-        if not user_states[user_id]["warned"]:
-            await update.message.reply_text("⏳ Генерация логотипа в процессе. Пожалуйста, подождите...")
-            user_states[user_id]["warned"] = True
-        return
-
-    # Запускаем генерацию с блокировкой
+    # Генерация
     async with lock:
         user_states[user_id]["warned"] = False
         try:
