@@ -24,8 +24,9 @@ defaults = DefaultBotProperties(parse_mode=ParseMode.HTML)
 bot = Bot(token=TELEGRAM_BOT_TOKEN, default=defaults)
 dp = Dispatcher()
 
-# Хранилище блокировок по пользователю
+# Хранилище блокировок и флагов пользователей
 user_locks = {}
+user_generation_flags = {}  # user_id -> bool
 
 def get_main_keyboard():
     return ReplyKeyboardMarkup(
@@ -65,7 +66,13 @@ async def prompt_for_idea(message: types.Message):
 @dp.message(lambda m: m.text and not m.text.startswith("/"))
 async def handle_idea(message: types.Message):
     user_id = message.from_user.id
+
+    if user_generation_flags.get(user_id, False):
+        await message.answer("⏳ Пожалуйста, дождитесь завершения генерации логотипа.")
+        return
+
     async with single_user_lock(user_id):
+        user_generation_flags[user_id] = True
         await message.answer("Генерирую логотип, подожди немного...")
         try:
             image = await generate_image(message.text)
@@ -75,6 +82,8 @@ async def handle_idea(message: types.Message):
         except Exception as e:
             logging.exception("Ошибка при генерации")
             await message.answer(f"Произошла ошибка: {e}")
+        finally:
+            user_generation_flags[user_id] = False
 
 async def generate_image(prompt: str) -> BytesIO:
     if USE_PLACEHOLDER:
