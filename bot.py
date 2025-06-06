@@ -79,6 +79,7 @@ async def handle_idea(message: types.Message):
             image.seek(0)
             input_file = BufferedInputFile(file=image.read(), filename="logo.png")
             await message.answer_photo(photo=input_file, caption="Вот логотип по твоей идее!")
+            await message.answer("💡 Пришли ещё идею для генерации логотипа!")
         except Exception as e:
             logging.exception("Ошибка при генерации")
             await message.answer(f"Произошла ошибка: {e}")
