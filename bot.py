@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 load_dotenv()
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-USE_PLACEHOLDER = os.getenv("USE_PLACEHOLDER", "True") == "True"
+USE_PLACEHOLDER = os.getenv("USE_PLACEHOLDER")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 logging.basicConfig(level=logging.INFO)
@@ -88,7 +88,7 @@ async def handle_idea(message: types.Message):
 
 async def generate_image(prompt: str) -> BytesIO:
     if USE_PLACEHOLDER:
-        await asyncio.sleep(5)
+        await asyncio.sleep(2)
         url = "https://picsum.photos/1024"
         response = requests.get(url)
         response.raise_for_status()
