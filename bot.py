@@ -1,7 +1,6 @@
 import os
 import logging
 import requests
-import asyncio
 from io import BytesIO
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
@@ -27,7 +26,7 @@ logging.basicConfig(level=logging.INFO)
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 # === Хранилище состояния пользователей ===
-user_states = {}  # user_id: {"lock": asyncio.Lock(), "warned": bool}
+user_states = {}  # user_id: {"is_generating": bool, "warned": bool}
 
 # === Кнопки меню ===
 def get_main_keyboard():
@@ -42,7 +41,7 @@ def get_main_keyboard():
 # === Команда /start ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    user_states[user_id] = {"lock": asyncio.Lock(), "warned": False}
+    user_states[user_id] = {"is_generating": False, "warned": False}
     await update.message.reply_text(
         "Привет! Я помогу тебе сгенерировать логотип. Выбери действие:",
         reply_markup=get_main_keyboard(),
@@ -99,17 +98,17 @@ async def handle_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text.strip()
 
-    # Инициализация состояния
+    # Инициализация состояния пользователя
     if user_id not in user_states:
-        user_states[user_id] = {"lock": asyncio.Lock(), "warned": False}
+        user_states[user_id] = {"is_generating": False, "warned": False}
 
-    lock = user_states[user_id]["lock"]
+    state = user_states[user_id]
 
-    # Блокируем всё, если уже генерируется
-    if lock.locked():
-        if not user_states[user_id]["warned"]:
+    # Если генерация уже идёт — блокируем сразу
+    if state["is_generating"]:
+        if not state["warned"]:
             await update.message.reply_text("⏳ Генерация логотипа в процессе. Пожалуйста, подождите...")
-            user_states[user_id]["warned"] = True
+            state["warned"] = True
         return
 
     # Обработка кнопок
@@ -122,19 +121,24 @@ async def handle_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Генерация
-    async with lock:
-        user_states[user_id]["warned"] = False
-        try:
-            await update.message.chat.send_action(action=ChatAction.TYPING)
-            await update.message.reply_text("Генерирую логотип, подожди немного...")
+    # Запуск генерации
+    state["is_generating"] = True
+    state["warned"] = False
 
-            image_file = await generate_image(text)
-            await update.message.reply_photo(photo=image_file, caption="Вот логотип по твоей идее!")
+    try:
+        await update.message.chat.send_action(action=ChatAction.TYPING)
+        await update.message.reply_text("Генерирую логотип, подожди немного...")
 
-        except Exception as e:
-            logging.exception("Ошибка при генерации изображения:")
-            await update.message.reply_text(f"Произошла ошибка: {e}")
+        image_file = await generate_image(text)
+        await update.message.reply_photo(photo=image_file, caption="Вот логотип по твоей идее!")
+
+    except Exception as e:
+        logging.exception("Ошибка при генерации изображения:")
+        await update.message.reply_text(f"Произошла ошибка: {e}")
+
+    finally:
+        state["is_generating"] = False
+        state["warned"] = False
 
 # === Запуск бота ===
 def main():
