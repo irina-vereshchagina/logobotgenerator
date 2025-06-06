@@ -12,6 +12,8 @@ from telegram.ext import (
     filters,
 )
 import openai
+from telegram.constants import ChatAction
+
 
 # Загружаем токены из .env
 load_dotenv()
@@ -29,6 +31,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Обработка текстовых сообщений
 async def handle_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_idea = update.message.text
+
+    await update.message.chat.send_action(action=ChatAction.TYPING)
     await update.message.reply_text("Генерирую логотип, подожди немного...")
 
     try:
