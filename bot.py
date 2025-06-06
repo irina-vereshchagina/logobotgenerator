@@ -1,7 +1,6 @@
 import os
 import logging
 import requests
-import asyncio
 from io import BytesIO
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
@@ -15,7 +14,7 @@ from telegram.ext import (
 )
 from openai import OpenAI
 
-# === Загрузка .env ===
+# === Загрузка конфигурации ===
 load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -26,10 +25,10 @@ logging.basicConfig(level=logging.INFO)
 # === OpenAI клиент ===
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# === Хранилище состояний пользователей ===
-user_states = {}  # user_id: {"lock": asyncio.Lock(), "warned": bool}
+# === Хранилище состояния пользователей ===
+user_states = {}  # user_id: {"is_generating": bool, "warned": bool}
 
-# === Клавиатура ===
+# === Кнопки меню ===
 def get_main_keyboard():
     return ReplyKeyboardMarkup(
         [
@@ -42,21 +41,21 @@ def get_main_keyboard():
 # === /start ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    user_states[user_id] = {"lock": asyncio.Lock(), "warned": False}
+    user_states[user_id] = {"is_generating": False, "warned": False}
     await update.message.reply_text(
         "Привет! Я помогу тебе сгенерировать логотип. Выбери действие:",
         reply_markup=get_main_keyboard(),
     )
 
-# === Информация ===
+# === Обработка кнопки Информация ===
 async def handle_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Я генерирую логотипы с помощью GPT-4o и DALL·E 3.\n\n"
         "Нажми '🎨 Генерация логотипа' и отправь идею, например:\n"
-        "👉 'Логотип для кофейни в минималистичном стиле'"
+        "👉 'логотип для кофейни в минималистичном стиле'"
     )
 
-# === Генерация изображения ===
+# === Генерация изображения (GPT → DALL·E 3) ===
 async def generate_image(user_prompt: str) -> BytesIO:
     chat_response = client.chat.completions.create(
         model="gpt-4o",
@@ -94,16 +93,14 @@ async def generate_image(user_prompt: str) -> BytesIO:
     image_file.name = "logo.png"
     return image_file
 
-# === Основной обработчик сообщений ===
+# === Основная обработка сообщений ===
 async def handle_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text.strip()
 
-    # Инициализация состояния
+    # Инициализация состояния пользователя
     if user_id not in user_states:
-        user_states[user_id] = {"lock": asyncio.Lock(), "warned": False}
-
-    lock = user_states[user_id]["lock"]
+        user_states[user_id] = {"is_generating": False, "warned": False}
 
     # Обработка кнопок
     if text == "ℹ️ Информация":
@@ -115,26 +112,31 @@ async def handle_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Проверка блокировки
-    if lock.locked():
+    # Защита от повторных генераций
+    if user_states[user_id]["is_generating"]:
         if not user_states[user_id]["warned"]:
-            await update.message.reply_text("⏳ Генерация логотипа в процессе. Пожалуйста, подожди...")
+            await update.message.reply_text("⏳ Генерация логотипа в процессе. Пожалуйста, подождите...")
             user_states[user_id]["warned"] = True
         return
 
-    # Основная логика генерации
-    async with lock:
+    # Запуск генерации
+    user_states[user_id]["is_generating"] = True
+    user_states[user_id]["warned"] = False
+
+    try:
+        await update.message.chat.send_action(action=ChatAction.TYPING)
+        await update.message.reply_text("Генерирую логотип, подожди немного...")
+
+        image_file = await generate_image(text)
+        await update.message.reply_photo(photo=image_file, caption="Вот логотип по твоей идее!")
+
+    except Exception as e:
+        logging.exception("Ошибка при генерации изображения:")
+        await update.message.reply_text(f"Произошла ошибка: {e}")
+
+    finally:
+        user_states[user_id]["is_generating"] = False
         user_states[user_id]["warned"] = False
-        try:
-            await update.message.chat.send_action(action=ChatAction.TYPING)
-            await update.message.reply_text("Генерирую логотип, подожди немного...")
-
-            image_file = await generate_image(text)
-            await update.message.reply_photo(photo=image_file, caption="Вот логотип по твоей идее!")
-
-        except Exception as e:
-            logging.exception("Ошибка при генерации изображения:")
-            await update.message.reply_text(f"Произошла ошибка: {e}")
 
 # === Запуск бота ===
 def main():
