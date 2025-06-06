@@ -29,10 +29,10 @@ logging.basicConfig(level=logging.INFO)
 # === OpenAI клиент ===
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# === Пользовательское состояние генерации ===
+# === Хранилище состояний пользователя ===
 user_states = {}
 
-# === Генерация кнопок ===
+# === Генерация клавиатуры ===
 def get_main_keyboard():
     return ReplyKeyboardMarkup(
         [
@@ -42,9 +42,9 @@ def get_main_keyboard():
         resize_keyboard=True,
     )
 
-# === Команда /start ===
+# === /start ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_states[update.effective_user.id] = {"busy": False}
+    user_states[update.effective_user.id] = {"busy": False, "warned": False}
     await update.message.reply_text(
         "Привет! Я помогу тебе сгенерировать логотип. Выбери действие:",
         reply_markup=get_main_keyboard(),
@@ -53,12 +53,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # === Информация ===
 async def handle_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Я генерирую логотипы с помощью GPT-4o и DALL·E 3. Просто выбери '🎨 Генерация логотипа' и опиши идею, например:\n\n"
-        "👉 'Логотип для кофейни в минималистичном стиле'\n\n"
-        "Обычно генерация занимает 10–15 секунд.",
+        "Я генерирую логотипы с помощью GPT-4o и DALL·E 3.\n\n"
+        "Нажми '🎨 Генерация логотипа' и отправь идею, например:\n"
+        "👉 'Логотип кофейни в минималистичном стиле'."
     )
 
-# === Генерация изображения (GPT + DALL·E) ===
+# === Генерация изображения ===
 async def generate_image(user_prompt: str) -> BytesIO:
     chat_response = client.chat.completions.create(
         model="gpt-4o",
@@ -96,28 +96,34 @@ async def generate_image(user_prompt: str) -> BytesIO:
     image_file.name = "logo.png"
     return image_file
 
-# === Основной обработчик логотипа ===
+# === Обработка сообщений ===
 async def handle_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text.strip()
 
     if user_id not in user_states:
-        user_states[user_id] = {"busy": False}
+        user_states[user_id] = {"busy": False, "warned": False}
 
     # Обработка кнопок
     if text == "ℹ️ Информация":
         return await handle_info(update, context)
 
     if text == "🎨 Генерация логотипа":
-        await update.message.reply_text("Отправь мне текстовую идею для логотипа (например: 'логотип для магазина книг').")
+        await update.message.reply_text(
+            "Отправь идею логотипа (например: 'логотип для книжного магазина в минималистичном стиле')."
+        )
         return
 
-    # Защита от повторных запросов
+    # Если пользователь уже что-то генерирует
     if user_states[user_id]["busy"]:
-        await update.message.reply_text("⏳ Генерация логотипа в процессе. Пожалуйста, подожди...")
+        if not user_states[user_id]["warned"]:
+            await update.message.reply_text("⏳ Генерация логотипа в процессе. Пожалуйста, подожди...")
+            user_states[user_id]["warned"] = True
         return
 
+    # Начинаем генерацию
     user_states[user_id]["busy"] = True
+    user_states[user_id]["warned"] = False
 
     try:
         await update.message.chat.send_action(action=ChatAction.TYPING)
@@ -127,10 +133,11 @@ async def handle_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_photo(photo=image_file, caption="Вот логотип по твоей идее!")
 
     except Exception as e:
-        logging.exception("Ошибка при генерации:")
-        await update.message.reply_text(f"Произошла ошибка при генерации: {e}")
+        logging.exception("Ошибка при генерации изображения:")
+        await update.message.reply_text(f"Произошла ошибка: {e}")
     finally:
         user_states[user_id]["busy"] = False
+        user_states[user_id]["warned"] = False
 
 # === Запуск бота ===
 def main():
