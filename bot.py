@@ -1,100 +1,107 @@
 import os
-import logging
-import requests
 import asyncio
-from io import BytesIO
+import logging
+import random
+import requests
+from aiogram import Bot, Dispatcher, types
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.filters import CommandStart, Command
+from aiogram.enums import ParseMode
+from aiogram.utils.keyboard import ReplyKeyboardBuilder
 from dotenv import load_dotenv
-from telegram import (
-    Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
-)
-from telegram.constants import ChatAction
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    ContextTypes,
-    ConversationHandler,
-    filters,
-)
+from io import BytesIO
 
-# === Этапы диалога ===
-WAITING_FOR_IDEA = 1
-
-# === Загрузка .env ===
 load_dotenv()
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-USE_PLACEHOLDER = os.getenv("USE_PLACEHOLDER") == "True"
 
-# === Логирование ===
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+USE_PLACEHOLDER = os.getenv("USE_PLACEHOLDER", "True") == "True"
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
 logging.basicConfig(level=logging.INFO)
 
-# === Хранилище генераций ===
-active_generations = set()  # user_ids в процессе генерации
+bot = Bot(token=TELEGRAM_BOT_TOKEN, parse_mode=ParseMode.HTML)
+dp = Dispatcher()
 
-# === Кнопки ===
-def get_main_keyboard():
-    return ReplyKeyboardMarkup(
-        [
-            [KeyboardButton("🎨 Генерация логотипа")],
-            [KeyboardButton("ℹ️ Информация")],
-        ],
-        resize_keyboard=True,
+# Хранилище активных пользователей
+active_generations = set()
+
+main_keyboard = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="🎨 Генерация логотипа")],
+        [KeyboardButton(text="ℹ️ Информация")],
+    ],
+    resize_keyboard=True
+)
+
+@dp.message(CommandStart())
+async def start(message: types.Message):
+    active_generations.discard(message.from_user.id)
+    await message.answer(
+        "👋 Привет! Я помогу сгенерировать логотип. Выбери действие:",
+        reply_markup=main_keyboard
     )
 
-# === /start ===
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Привет! Я помогу тебе сгенерировать логотип. Выбери действие:",
-        reply_markup=get_main_keyboard(),
+@dp.message(lambda m: m.text == "ℹ️ Информация")
+async def info(message: types.Message):
+    await message.answer(
+        "Генерация логотипов через GPT-4o + DALL·E 3.\n\n"
+        "Жми '🎨 Генерация логотипа' и отправь идею."
     )
-    return ConversationHandler.END
 
-# === Информация ===
-async def info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Я генерирую логотипы с помощью GPT-4o и DALL·E 3.\n\n"
-        "Нажми '🎨 Генерация логотипа' и отправь идею, например:\n"
-        "👉 'логотип для кофейни в минималистичном стиле'"
+@dp.message(lambda m: m.text == "🎨 Генерация логотипа")
+async def prompt_for_idea(message: types.Message):
+    user_id = message.from_user.id
+    if user_id in active_generations:
+        return await message.answer("⏳ Генерация уже в процессе. Подожди...")
+
+    await message.answer(
+        "✍️ Отправь идею логотипа (например: 'логотип для кофейни в минималистичном стиле')",
     )
-    return ConversationHandler.END
 
-# === Заглушка / генерация ===
-async def generate_image(user_prompt: str) -> BytesIO:
+@dp.message(lambda m: m.text and not m.text.startswith("/"))
+async def handle_idea(message: types.Message):
+    user_id = message.from_user.id
+    if user_id in active_generations:
+        return await message.answer("⏳ Подожди, логотип ещё в процессе генерации...")
+
+    active_generations.add(user_id)
+    await message.answer("Генерирую логотип, подожди немного...")
+
+    try:
+        image = await generate_image(message.text)
+        await message.answer_photo(photo=image, caption="Вот логотип по твоей идее!")
+    except Exception as e:
+        logging.exception("Ошибка при генерации")
+        await message.answer(f"Произошла ошибка: {e}")
+    finally:
+        active_generations.discard(user_id)
+
+async def generate_image(prompt: str) -> BytesIO:
     if USE_PLACEHOLDER:
         await asyncio.sleep(5)
         url = "https://picsum.photos/1024"
         response = requests.get(url)
         response.raise_for_status()
-        image_file = BytesIO(response.content)
-        image_file.name = "logo.png"
-        return image_file
+        image = BytesIO(response.content)
+        image.name = "logo.png"
+        return image
 
     from openai import OpenAI
     client = OpenAI(api_key=OPENAI_API_KEY)
 
-    chat_response = client.chat.completions.create(
+    chat = client.chat.completions.create(
         model="gpt-4o",
         messages=[
-            {
-                "role": "system",
-                "content": (
-                    "Ты создаёшь визуально точные, детализированные описания изображений для DALL·E 3. "
-                    "Твоя задача — превратить пользовательский запрос в качественный промпт для генерации логотипа."
-                )
-            },
-            {
-                "role": "user",
-                "content": f"Сформулируй промпт для DALL·E 3: {user_prompt}"
-            }
-        ],
-        temperature=0.7
+            {"role": "system", "content": "Ты создаешь промпт для генерации логотипа через DALL·E 3."},
+            {"role": "user", "content": prompt}
+        ]
     )
-    improved_prompt = chat_response.choices[0].message.content.strip()
+
+    prompt_dalle = chat.choices[0].message.content.strip()
 
     image_response = client.images.generate(
         model="dall-e-3",
-        prompt=improved_prompt,
+        prompt=prompt_dalle,
         n=1,
         size="1024x1024",
         quality="standard",
@@ -102,72 +109,15 @@ async def generate_image(user_prompt: str) -> BytesIO:
     )
 
     image_url = image_response.data[0].url
-    image_data = requests.get(image_url)
-    image_data.raise_for_status()
+    img_data = requests.get(image_url)
+    img_data.raise_for_status()
 
-    image_file = BytesIO(image_data.content)
-    image_file.name = "logo.png"
-    return image_file
-
-# === Обработка кнопки "Генерация логотипа" ===
-async def request_logo_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Отправь идею логотипа (например: 'логотип для книжного магазина в минималистичном стиле').",
-        reply_markup=ReplyKeyboardRemove(),
-    )
-    return WAITING_FOR_IDEA
-
-# === Обработка идеи ===
-async def handle_logo_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    user_prompt = update.message.text.strip()
-
-    if user_id in active_generations:
-        await update.message.reply_text("⏳ Генерация уже идёт. Подожди немного...")
-        return WAITING_FOR_IDEA
-
-    active_generations.add(user_id)
-    await update.message.chat.send_action(action=ChatAction.TYPING)
-    await update.message.reply_text("Генерирую логотип, подожди немного...")
-
-    try:
-        image = await generate_image(user_prompt)
-        await update.message.reply_photo(photo=image, caption="Вот логотип по твоей идее!")
-    except Exception as e:
-        logging.exception("Ошибка при генерации:")
-        await update.message.reply_text(f"Произошла ошибка: {e}")
-    finally:
-        active_generations.discard(user_id)
-
-    await update.message.reply_text("Хочешь сгенерировать ещё? Выбери действие:", reply_markup=get_main_keyboard())
-    return ConversationHandler.END
-
-# === Прерывание ===
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Окей, возвращаю в меню.", reply_markup=get_main_keyboard())
-    return ConversationHandler.END
-
-# === Запуск бота ===
-def main():
-    app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
-
-    conv = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex("^🎨 Генерация логотипа$"), request_logo_idea)],
-        states={
-            WAITING_FOR_IDEA: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_logo_idea),
-            ]
-        },
-        fallbacks=[CommandHandler("cancel", cancel)],
-        allow_reentry=True,
-    )
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.Regex("^ℹ️ Информация$"), info))
-    app.add_handler(conv)
-
-    print("Бот запущен...")
-    app.run_polling()
+    image = BytesIO(img_data.content)
+    image.name = "logo.png"
+    return image
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    from aiogram import executor
+
+    asyncio.run(dp.start_polling(bot))
