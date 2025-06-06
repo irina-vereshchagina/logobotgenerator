@@ -1,6 +1,7 @@
 import os
 import logging
 import requests
+import asyncio
 from io import BytesIO
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
@@ -12,23 +13,20 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
-from openai import OpenAI
 
 # === Загрузка .env ===
 load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+USE_PLACEHOLDER = os.getenv("USE_PLACEHOLDER") == "True"
 
 # === Логирование ===
 logging.basicConfig(level=logging.INFO)
 
-# === OpenAI клиент ===
-client = OpenAI(api_key=OPENAI_API_KEY)
-
-# === Состояние пользователей ===
+# === Хранилище состояния пользователей ===
 user_states = {}  # user_id: {"is_generating": bool, "warned": bool}
 
-# === Кнопки ===
+# === Кнопки меню ===
 def get_main_keyboard():
     return ReplyKeyboardMarkup(
         [
@@ -55,8 +53,22 @@ async def handle_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👉 'логотип для кофейни в минималистичном стиле'"
     )
 
-# === Генерация изображения ===
+# === Заглушка или реальная генерация ===
 async def generate_image(user_prompt: str) -> BytesIO:
+    if USE_PLACEHOLDER:
+        await asyncio.sleep(5)
+        url = "https://picsum.photos/1024"
+        response = requests.get(url)
+        response.raise_for_status()
+
+        image_file = BytesIO(response.content)
+        image_file.name = "logo.png"
+        return image_file
+
+    # === Реальная генерация ===
+    from openai import OpenAI
+    client = OpenAI(api_key=OPENAI_API_KEY)
+
     chat_response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
@@ -93,7 +105,7 @@ async def generate_image(user_prompt: str) -> BytesIO:
     image_file.name = "logo.png"
     return image_file
 
-# === Обработка текстовых сообщений ===
+# === Обработка сообщений ===
 async def handle_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text.strip()
@@ -103,7 +115,7 @@ async def handle_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     state = user_states[user_id]
 
-    # Обработка кнопок
+    # Кнопки
     if text == "ℹ️ Информация":
         return await handle_info(update, context)
 
@@ -113,14 +125,14 @@ async def handle_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Генерация уже идёт
+    # Защита от повторов
     if state["is_generating"]:
         if not state["warned"]:
             await update.message.reply_text("⏳ Генерация логотипа в процессе. Пожалуйста, подождите...")
             state["warned"] = True
         return
 
-    # Запускаем генерацию
+    # Генерация
     state["is_generating"] = True
     state["warned"] = False
 
