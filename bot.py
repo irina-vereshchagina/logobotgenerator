@@ -1,4 +1,4 @@
-import os
+""import os
 import asyncio
 import logging
 import random
@@ -7,6 +7,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import CommandStart, Command
 from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
 from dotenv import load_dotenv
 from io import BytesIO
 from contextlib import asynccontextmanager
@@ -19,7 +20,8 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 logging.basicConfig(level=logging.INFO)
 
-bot = Bot(token=TELEGRAM_BOT_TOKEN, parse_mode=ParseMode.HTML)
+defaults = DefaultBotProperties(parse_mode=ParseMode.HTML)
+bot = Bot(token=TELEGRAM_BOT_TOKEN, default=defaults)
 dp = Dispatcher()
 
 # Хранилище блокировок по пользователю
