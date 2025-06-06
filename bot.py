@@ -4,7 +4,7 @@ import logging
 import random
 import requests
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, BufferedInputFile
 from aiogram.filters import CommandStart, Command
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
@@ -69,7 +69,9 @@ async def handle_idea(message: types.Message):
         await message.answer("Генерирую логотип, подожди немного...")
         try:
             image = await generate_image(message.text)
-            await message.answer_photo(photo=image, caption="Вот логотип по твоей идее!")
+            image.seek(0)
+            input_file = BufferedInputFile(file=image.read(), filename="logo.png")
+            await message.answer_photo(photo=input_file, caption="Вот логотип по твоей идее!")
         except Exception as e:
             logging.exception("Ошибка при генерации")
             await message.answer(f"Произошла ошибка: {e}")
