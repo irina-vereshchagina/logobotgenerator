@@ -23,10 +23,10 @@ USE_PLACEHOLDER = os.getenv("USE_PLACEHOLDER") == "True"
 # === Логирование ===
 logging.basicConfig(level=logging.INFO)
 
-# === Хранилище состояния пользователей ===
-user_states = {}  # user_id: {"is_generating": bool, "warned": bool}
+# === Хранилище состояний ===
+user_states = {}  # user_id: {"is_generating": bool}
 
-# === Кнопки меню ===
+# === Кнопки ===
 def get_main_keyboard():
     return ReplyKeyboardMarkup(
         [
@@ -39,7 +39,7 @@ def get_main_keyboard():
 # === /start ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    user_states[user_id] = {"is_generating": False, "warned": False}
+    user_states[user_id] = {"is_generating": False}
     await update.message.reply_text(
         "Привет! Я помогу тебе сгенерировать логотип. Выбери действие:",
         reply_markup=get_main_keyboard(),
@@ -53,19 +53,17 @@ async def handle_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👉 'логотип для кофейни в минималистичном стиле'"
     )
 
-# === Заглушка или реальная генерация ===
+# === Генерация (реальная или заглушка) ===
 async def generate_image(user_prompt: str) -> BytesIO:
     if USE_PLACEHOLDER:
         await asyncio.sleep(5)
         url = "https://picsum.photos/1024"
         response = requests.get(url)
         response.raise_for_status()
-
         image_file = BytesIO(response.content)
         image_file.name = "logo.png"
         return image_file
 
-    # === Реальная генерация ===
     from openai import OpenAI
     client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -105,17 +103,28 @@ async def generate_image(user_prompt: str) -> BytesIO:
     image_file.name = "logo.png"
     return image_file
 
-# === Обработка сообщений ===
+# === Обработка всех текстов ===
 async def handle_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text.strip()
 
     if user_id not in user_states:
-        user_states[user_id] = {"is_generating": False, "warned": False}
+        user_states[user_id] = {"is_generating": False}
 
     state = user_states[user_id]
 
-    # Кнопки
+    # Удаляем все лишние сообщения во время генерации
+    if state["is_generating"]:
+        try:
+            await context.bot.delete_message(
+                chat_id=update.effective_chat.id,
+                message_id=update.message.message_id,
+            )
+        except Exception as e:
+            logging.warning(f"Не удалось удалить сообщение: {e}")
+        return
+
+    # Обработка кнопок
     if text == "ℹ️ Информация":
         return await handle_info(update, context)
 
@@ -125,17 +134,8 @@ async def handle_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Защита от повторов
-    if state["is_generating"]:
-        if not state["warned"]:
-            await update.message.reply_text("⏳ Генерация логотипа в процессе. Пожалуйста, подождите...")
-            state["warned"] = True
-        return
-
     # Генерация
     state["is_generating"] = True
-    state["warned"] = False
-
     try:
         await update.message.chat.send_action(action=ChatAction.TYPING)
         await update.message.reply_text("Генерирую логотип, подожди немного...")
@@ -149,9 +149,8 @@ async def handle_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     finally:
         state["is_generating"] = False
-        state["warned"] = False
 
-# === Запуск бота ===
+# === Запуск ===
 def main():
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
