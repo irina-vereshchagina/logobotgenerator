@@ -7,9 +7,9 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import CommandStart, Command
 from aiogram.enums import ParseMode
-from aiogram.utils.keyboard import ReplyKeyboardBuilder
 from dotenv import load_dotenv
 from io import BytesIO
+from contextlib import asynccontextmanager
 
 load_dotenv()
 
@@ -22,23 +22,29 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TELEGRAM_BOT_TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher()
 
-# Хранилище активных пользователей
-active_generations = set()
+# Хранилище блокировок по пользователю
+user_locks = {}
 
-main_keyboard = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="🎨 Генерация логотипа")],
-        [KeyboardButton(text="ℹ️ Информация")],
-    ],
-    resize_keyboard=True
-)
+def get_main_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🎨 Генерация логотипа")],
+            [KeyboardButton(text="ℹ️ Информация")],
+        ],
+        resize_keyboard=True
+    )
+
+@asynccontextmanager
+async def single_user_lock(user_id: int):
+    lock = user_locks.setdefault(user_id, asyncio.Lock())
+    async with lock:
+        yield
 
 @dp.message(CommandStart())
 async def start(message: types.Message):
-    active_generations.discard(message.from_user.id)
     await message.answer(
         "👋 Привет! Я помогу сгенерировать логотип. Выбери действие:",
-        reply_markup=main_keyboard
+        reply_markup=get_main_keyboard()
     )
 
 @dp.message(lambda m: m.text == "ℹ️ Информация")
@@ -50,10 +56,6 @@ async def info(message: types.Message):
 
 @dp.message(lambda m: m.text == "🎨 Генерация логотипа")
 async def prompt_for_idea(message: types.Message):
-    user_id = message.from_user.id
-    if user_id in active_generations:
-        return await message.answer("⏳ Генерация уже в процессе. Подожди...")
-
     await message.answer(
         "✍️ Отправь идею логотипа (например: 'логотип для кофейни в минималистичном стиле')",
     )
@@ -61,20 +63,14 @@ async def prompt_for_idea(message: types.Message):
 @dp.message(lambda m: m.text and not m.text.startswith("/"))
 async def handle_idea(message: types.Message):
     user_id = message.from_user.id
-    if user_id in active_generations:
-        return await message.answer("⏳ Подожди, логотип ещё в процессе генерации...")
-
-    active_generations.add(user_id)
-    await message.answer("Генерирую логотип, подожди немного...")
-
-    try:
-        image = await generate_image(message.text)
-        await message.answer_photo(photo=image, caption="Вот логотип по твоей идее!")
-    except Exception as e:
-        logging.exception("Ошибка при генерации")
-        await message.answer(f"Произошла ошибка: {e}")
-    finally:
-        active_generations.discard(user_id)
+    async with single_user_lock(user_id):
+        await message.answer("Генерирую логотип, подожди немного...")
+        try:
+            image = await generate_image(message.text)
+            await message.answer_photo(photo=image, caption="Вот логотип по твоей идее!")
+        except Exception as e:
+            logging.exception("Ошибка при генерации")
+            await message.answer(f"Произошла ошибка: {e}")
 
 async def generate_image(prompt: str) -> BytesIO:
     if USE_PLACEHOLDER:
