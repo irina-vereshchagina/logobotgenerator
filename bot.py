@@ -12,34 +12,42 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
-import openai
+from openai import OpenAI
 
-# Загружаем переменные окружения
+# === Загрузка переменных окружения ===
 load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# Настройка логирования
+# === Логирование ===
 logging.basicConfig(level=logging.INFO)
-openai.api_key = OPENAI_API_KEY
 
-# Команда /start
+# === Инициализация OpenAI клиента ===
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+# === Команда /start ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Привет! Опиши идею для логотипа — я сгенерирую картинку по твоему описанию.")
+    await update.message.reply_text(
+        "Привет! Опиши идею логотипа (например: 'логотип кофейни в минималистичном стиле с тёплыми цветами'), "
+        "и я пришлю тебе сгенерированное изображение."
+    )
 
-# Основная функция генерации изображения
+# === Генерация изображения (GPT + DALL·E 3) ===
 async def generate_image(user_prompt: str) -> BytesIO:
-    # GPT-4 улучшает промпт
-    chat_response = openai.ChatCompletion.create(
+    # GPT-4o формирует чёткий промпт
+    chat_response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
             {
                 "role": "system",
-                "content": "Ты пишешь детализированные, визуально ориентированные промпты для генерации изображений с помощью DALL·E 3."
+                "content": (
+                    "Ты создаёшь визуально точные, детализированные описания изображений для DALL·E 3. "
+                    "Твоя задача — превратить пользовательский запрос в качественный промпт для генерации логотипа."
+                )
             },
             {
                 "role": "user",
-                "content": f"Опиши как для DALL·E 3: {user_prompt}"
+                "content": f"Сформулируй промпт для DALL·E 3: {user_prompt}"
             }
         ],
         temperature=0.7
@@ -48,11 +56,11 @@ async def generate_image(user_prompt: str) -> BytesIO:
     improved_prompt = chat_response.choices[0].message.content.strip()
 
     # Генерация изображения DALL·E 3
-    image_response = openai.images.generate(
+    image_response = client.images.generate(
         model="dall-e-3",
         prompt=improved_prompt,
         n=1,
-        size="1024x1024",
+        size="1024x1024",  # Можно изменить на 1792x1024 или 1024x1792 при необходимости
         quality="standard",
         style="vivid",
     )
@@ -63,10 +71,9 @@ async def generate_image(user_prompt: str) -> BytesIO:
 
     image_file = BytesIO(image_data.content)
     image_file.name = "logo.png"
-
     return image_file
 
-# Обработка текстовых сообщений
+# === Обработка текстовых сообщений ===
 async def handle_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_idea = update.message.text
 
@@ -80,7 +87,7 @@ async def handle_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.exception("Ошибка при генерации изображения:")
         await update.message.reply_text(f"Произошла ошибка: {e}")
 
-# Точка входа
+# === Точка входа ===
 def main():
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
