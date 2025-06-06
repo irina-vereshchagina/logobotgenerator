@@ -4,15 +4,21 @@ import requests
 import asyncio
 from io import BytesIO
 from dotenv import load_dotenv
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram import (
+    Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+)
 from telegram.constants import ChatAction
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
     ContextTypes,
+    ConversationHandler,
     filters,
 )
+
+# === Этапы диалога ===
+WAITING_FOR_IDEA = 1
 
 # === Загрузка .env ===
 load_dotenv()
@@ -23,8 +29,8 @@ USE_PLACEHOLDER = os.getenv("USE_PLACEHOLDER") == "True"
 # === Логирование ===
 logging.basicConfig(level=logging.INFO)
 
-# === Хранилище состояний ===
-user_states = {}  # user_id: {"is_generating": bool}
+# === Хранилище генераций ===
+active_generations = set()  # user_ids в процессе генерации
 
 # === Кнопки ===
 def get_main_keyboard():
@@ -38,22 +44,22 @@ def get_main_keyboard():
 
 # === /start ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    user_states[user_id] = {"is_generating": False}
     await update.message.reply_text(
         "Привет! Я помогу тебе сгенерировать логотип. Выбери действие:",
         reply_markup=get_main_keyboard(),
     )
+    return ConversationHandler.END
 
 # === Информация ===
-async def handle_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Я генерирую логотипы с помощью GPT-4o и DALL·E 3.\n\n"
         "Нажми '🎨 Генерация логотипа' и отправь идею, например:\n"
         "👉 'логотип для кофейни в минималистичном стиле'"
     )
+    return ConversationHandler.END
 
-# === Генерация (реальная или заглушка) ===
+# === Заглушка / генерация ===
 async def generate_image(user_prompt: str) -> BytesIO:
     if USE_PLACEHOLDER:
         await asyncio.sleep(5)
@@ -103,58 +109,63 @@ async def generate_image(user_prompt: str) -> BytesIO:
     image_file.name = "logo.png"
     return image_file
 
-# === Обработка всех текстов ===
-async def handle_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# === Обработка кнопки "Генерация логотипа" ===
+async def request_logo_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Отправь идею логотипа (например: 'логотип для книжного магазина в минималистичном стиле').",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    return WAITING_FOR_IDEA
+
+# === Обработка идеи ===
+async def handle_logo_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    text = update.message.text.strip()
+    user_prompt = update.message.text.strip()
 
-    if user_id not in user_states:
-        user_states[user_id] = {"is_generating": False}
+    if user_id in active_generations:
+        await update.message.reply_text("⏳ Генерация уже идёт. Подожди немного...")
+        return WAITING_FOR_IDEA
 
-    state = user_states[user_id]
+    active_generations.add(user_id)
+    await update.message.chat.send_action(action=ChatAction.TYPING)
+    await update.message.reply_text("Генерирую логотип, подожди немного...")
 
-    # Удаляем все лишние сообщения во время генерации
-    if state["is_generating"]:
-        try:
-            await context.bot.delete_message(
-                chat_id=update.effective_chat.id,
-                message_id=update.message.message_id,
-            )
-        except Exception as e:
-            logging.warning(f"Не удалось удалить сообщение: {e}")
-        return
-
-    # Обработка кнопок
-    if text == "ℹ️ Информация":
-        return await handle_info(update, context)
-
-    if text == "🎨 Генерация логотипа":
-        await update.message.reply_text(
-            "Отправь идею логотипа (например: 'логотип для книжного магазина в минималистичном стиле')."
-        )
-        return
-
-    # Генерация
-    state["is_generating"] = True
     try:
-        await update.message.chat.send_action(action=ChatAction.TYPING)
-        await update.message.reply_text("Генерирую логотип, подожди немного...")
-
-        image_file = await generate_image(text)
-        await update.message.reply_photo(photo=image_file, caption="Вот логотип по твоей идее!")
-
+        image = await generate_image(user_prompt)
+        await update.message.reply_photo(photo=image, caption="Вот логотип по твоей идее!")
     except Exception as e:
-        logging.exception("Ошибка при генерации изображения:")
+        logging.exception("Ошибка при генерации:")
         await update.message.reply_text(f"Произошла ошибка: {e}")
-
     finally:
-        state["is_generating"] = False
+        active_generations.discard(user_id)
 
-# === Запуск ===
+    await update.message.reply_text("Хочешь сгенерировать ещё? Выбери действие:", reply_markup=get_main_keyboard())
+    return ConversationHandler.END
+
+# === Прерывание ===
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Окей, возвращаю в меню.", reply_markup=get_main_keyboard())
+    return ConversationHandler.END
+
+# === Запуск бота ===
 def main():
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
+
+    conv = ConversationHandler(
+        entry_points=[MessageHandler(filters.Regex("^🎨 Генерация логотипа$"), request_logo_idea)],
+        states={
+            WAITING_FOR_IDEA: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_logo_idea),
+            ]
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+        allow_reentry=True,
+    )
+
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_idea))
+    app.add_handler(MessageHandler(filters.Regex("^ℹ️ Информация$"), info))
+    app.add_handler(conv)
+
     print("Бот запущен...")
     app.run_polling()
 
