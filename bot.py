@@ -14,7 +14,7 @@ from telegram.ext import (
 )
 from openai import OpenAI
 
-# === Загрузка конфигурации ===
+# === Загрузка .env ===
 load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -25,10 +25,10 @@ logging.basicConfig(level=logging.INFO)
 # === OpenAI клиент ===
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# === Хранилище состояния пользователей ===
+# === Состояние пользователей ===
 user_states = {}  # user_id: {"is_generating": bool, "warned": bool}
 
-# === Кнопки меню ===
+# === Кнопки ===
 def get_main_keyboard():
     return ReplyKeyboardMarkup(
         [
@@ -38,7 +38,7 @@ def get_main_keyboard():
         resize_keyboard=True,
     )
 
-# === Команда /start ===
+# === /start ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_states[user_id] = {"is_generating": False, "warned": False}
@@ -98,18 +98,10 @@ async def handle_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text.strip()
 
-    # Инициализация состояния пользователя
     if user_id not in user_states:
         user_states[user_id] = {"is_generating": False, "warned": False}
 
     state = user_states[user_id]
-
-    # Если генерация уже идёт — блокируем сразу
-    if state["is_generating"]:
-        if not state["warned"]:
-            await update.message.reply_text("⏳ Генерация логотипа в процессе. Пожалуйста, подождите...")
-            state["warned"] = True
-        return
 
     # Обработка кнопок
     if text == "ℹ️ Информация":
@@ -121,7 +113,14 @@ async def handle_idea(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Запуск генерации
+    # Генерация уже идёт
+    if state["is_generating"]:
+        if not state["warned"]:
+            await update.message.reply_text("⏳ Генерация логотипа в процессе. Пожалуйста, подождите...")
+            state["warned"] = True
+        return
+
+    # Запускаем генерацию
     state["is_generating"] = True
     state["warned"] = False
 
