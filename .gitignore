@@ -1,2 +1,6 @@
 .env
 .venv
+image.jpg
+test.py
+.vscode/
+test/
