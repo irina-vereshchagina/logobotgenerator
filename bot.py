@@ -51,8 +51,9 @@ async def single_user_lock(user_id: int):
         yield
 
 # Старт бота
-@dp.message(CommandStart())
+@dp.message(lambda m: m.text == "/start")
 async def start(message: types.Message):
+    print(f"🔥 Получен /start от {message.from_user.id}")
     await message.answer(
         "👋 Привет! Я помогу сгенерировать логотип или перевести изображение в SVG.\n\nВыбери действие:",
         reply_markup=get_main_keyboard()
