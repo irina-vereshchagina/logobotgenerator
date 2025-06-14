@@ -28,7 +28,8 @@ from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import CommandStart
 from config import TELEGRAM_BOT_TOKEN
-from handlers import start, info, prompt, generation, vectorize  # 👈 добавили vectorize
+from handlers import start, info, prompt, generation, vectorize
+from handlers.vectorize import awaiting_image_users
 
 logging.basicConfig(level=logging.INFO)
 
@@ -36,12 +37,37 @@ defaults = DefaultBotProperties(parse_mode=ParseMode.HTML)
 bot = Bot(token=TELEGRAM_BOT_TOKEN, default=defaults)
 dp = Dispatcher()
 
+# Фильтр: текст, не команда, и не в режиме векторизации
+def is_text_and_not_in_vector_mode(message):
+    return (
+        message.text
+        and not message.text.startswith("/")
+        and message.from_user.id not in awaiting_image_users
+    )
+
+# Фильтр: фото + пользователь в режиме ожидания векторизации
+def is_vectorization_photo(message):
+    return (
+        message.photo
+        and message.from_user.id in awaiting_image_users
+    )
+
 dp.message.register(start.start, CommandStart())
+dp.message.register(start.start, lambda m: m.text == "⬅️ В меню")
 dp.message.register(info.info, lambda m: m.text == "ℹ️ Информация")
 dp.message.register(prompt.prompt_for_idea, lambda m: m.text == "🎨 Генерация логотипа")
-dp.message.register(vectorize.ask_for_image, lambda m: m.text == "🖼 Векторизация")  # 👈 новая кнопка
-dp.message.register(vectorize.handle_vectorization_image, lambda m: m.photo)  # 👈 обработка фото
-dp.message.register(generation.handle_idea, lambda m: m.text and not m.text.startswith("/"))
+dp.message.register(vectorize.ask_for_image, lambda m: m.text == "🖼 Векторизация")
+dp.message.register(vectorize.handle_vectorization_image, is_vectorization_photo)
+dp.message.register(generation.handle_idea, is_text_and_not_in_vector_mode)
+
+# Универсальный fallback — на все неподдерживаемые типы
+@dp.message()
+async def fallback_handler(message):
+    user_id = message.from_user.id
+    if user_id in awaiting_image_users:
+        await message.answer("❗️Ожидается изображение (фото) для векторизации.")
+    else:
+        await message.answer("❗️Вы сейчас в главном меню. Пожалуйста, выберите действие кнопкой ниже.")
 
 if __name__ == "__main__":
     asyncio.run(dp.start_polling(bot))
@@ -69,6 +95,14 @@ def get_main_keyboard():
             [KeyboardButton(text="🎨 Генерация логотипа")],
             [KeyboardButton(text="🖼 Векторизация")],
             [KeyboardButton(text="ℹ️ Информация")],
+        ],
+        resize_keyboard=True
+    )
+
+def get_back_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="⬅️ В меню")],
         ],
         resize_keyboard=True
     )
@@ -154,6 +188,10 @@ import logging
 async def handle_idea(message: types.Message):
     user_id = message.from_user.id
 
+    if not message.text:
+        await message.answer("❗️Ожидается текст с идеей логотипа. Пожалуйста, напишите словами.")
+        return
+
     if is_generating(user_id):
         await message.answer("⏳ Пожалуйста, дождитесь завершения генерации логотипа.")
         return
@@ -166,7 +204,7 @@ async def handle_idea(message: types.Message):
             image.seek(0)
             input_file = BufferedInputFile(file=image.read(), filename="logo.png")
             await message.answer_photo(photo=input_file, caption="Вот логотип по твоей идее!")
-            await message.answer("💡 Пришли ещё идею для генерации логотипа!")
+            await message.answer("💡 Пришли ещё идею или нажми '⬅️ В меню'.")
         except Exception as e:
             logging.exception("Ошибка при генерации")
             await message.answer(f"Произошла ошибка: {e}")
@@ -177,21 +215,32 @@ async def handle_idea(message: types.Message):
 🔹 handlers\info.py:
 ------------------------------------------------------------
 from aiogram import types
+from keyboards import get_main_keyboard
+from handlers.vectorize import awaiting_image_users
 
 async def info(message: types.Message):
+    user_id = message.from_user.id
+    awaiting_image_users.discard(user_id)  # сбрасываем режим векторизации
     await message.answer(
-        "Генерация логотипов через GPT-4o + DALL·E 3.\n\n"
-        "Жми '🎨 Генерация логотипа' и отправь идею."
+        "ℹ️ Генерация логотипов через GPT-4o + DALL·E 3.\n\n"
+        "Жми '🎨 Генерация логотипа' и отправь идею.\n"
+        "Или выбери другой режим ниже 👇",
+        reply_markup=get_main_keyboard()
     )
 
 
 🔹 handlers\prompt.py:
 ------------------------------------------------------------
 from aiogram import types
+from keyboards import get_back_keyboard
+from handlers.vectorize import awaiting_image_users
 
 async def prompt_for_idea(message: types.Message):
+    user_id = message.from_user.id
+    awaiting_image_users.discard(user_id)  # выходим из режима векторизации
     await message.answer(
         "✍️ Отправь идею логотипа (например: 'логотип для кофейни в минималистичном стиле')",
+        reply_markup=get_back_keyboard()
     )
 
 
@@ -200,8 +249,11 @@ async def prompt_for_idea(message: types.Message):
 from aiogram import types
 from aiogram.filters import CommandStart
 from keyboards import get_main_keyboard
+from handlers.vectorize import awaiting_image_users
 
 async def start(message: types.Message):
+    user_id = message.from_user.id
+    awaiting_image_users.discard(user_id)
     await message.answer(
         "👋 Привет! Я помогу сгенерировать логотип. Выбери действие:",
         reply_markup=get_main_keyboard()
@@ -213,6 +265,7 @@ async def start(message: types.Message):
 from aiogram import types
 from aiogram.types import BufferedInputFile
 from utils.user_state import single_user_lock, is_generating, set_generating
+from keyboards import get_back_keyboard
 import logging
 import os
 import requests
@@ -223,28 +276,21 @@ load_dotenv()
 VECTORIZE_USER = os.getenv("VECTORIZE_USER")
 VECTORIZE_PASS = os.getenv("VECTORIZE_PASS")
 
-# Пользователи, которые ожидают отправки изображения
 awaiting_image_users = set()
 
 async def ask_for_image(message: types.Message):
     user_id = message.from_user.id
     awaiting_image_users.add(user_id)
-    await message.answer("📤 Пожалуйста, пришли изображение для векторизации (JPG, PNG и т.д.).")
+    await message.answer(
+        "📤 Пожалуйста, пришли изображение для векторизации (JPG, PNG и т.д.).",
+        reply_markup=get_back_keyboard()
+    )
 
 async def handle_vectorization_image(message: types.Message):
     user_id = message.from_user.id
 
-    # Обрабатываем только если пользователь в режиме ожидания картинки
-    if user_id not in awaiting_image_users:
-        return
-
-    # Уже выполняется векторизация — не даём продолжить
     if is_generating(user_id):
         await message.answer("⏳ Пожалуйста, дождитесь завершения векторизации.")
-        return
-
-    if not message.photo:
-        await message.answer("❗️ Пожалуйста, отправьте именно изображение, не файл и не текст.")
         return
 
     async with single_user_lock(user_id):
@@ -286,7 +332,6 @@ async def handle_vectorization_image(message: types.Message):
             logging.exception("Ошибка при векторизации")
             await message.answer(f"⚠️ Произошла ошибка: {e}")
         finally:
-            awaiting_image_users.discard(user_id)
             set_generating(user_id, False)
 
 

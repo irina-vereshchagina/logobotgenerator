@@ -1,7 +1,7 @@
 from aiogram import types
 from aiogram.types import BufferedInputFile
-from utils.user_state import single_user_lock, is_generating, set_generating
 from keyboards import get_back_keyboard
+from utils.user_state import single_user_lock, is_generating, set_generating, set_user_state, STATE_VECTORIZE
 import logging
 import os
 import requests
@@ -12,11 +12,9 @@ load_dotenv()
 VECTORIZE_USER = os.getenv("VECTORIZE_USER")
 VECTORIZE_PASS = os.getenv("VECTORIZE_PASS")
 
-awaiting_image_users = set()
-
 async def ask_for_image(message: types.Message):
     user_id = message.from_user.id
-    awaiting_image_users.add(user_id)
+    set_user_state(user_id, STATE_VECTORIZE)
     await message.answer(
         "📤 Пожалуйста, пришли изображение для векторизации (JPG, PNG и т.д.).",
         reply_markup=get_back_keyboard()

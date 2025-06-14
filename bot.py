@@ -6,7 +6,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import CommandStart
 from config import TELEGRAM_BOT_TOKEN
 from handlers import start, info, prompt, generation, vectorize
-from handlers.vectorize import awaiting_image_users
+from utils.user_state import get_user_state, STATE_GENERATE, STATE_VECTORIZE, STATE_MENU
 
 logging.basicConfig(level=logging.INFO)
 
@@ -14,19 +14,16 @@ defaults = DefaultBotProperties(parse_mode=ParseMode.HTML)
 bot = Bot(token=TELEGRAM_BOT_TOKEN, default=defaults)
 dp = Dispatcher()
 
-# Фильтр: текст, не команда, и не в режиме векторизации
-def is_text_and_not_in_vector_mode(message):
+def is_generate_text(message):
     return (
-        message.text
-        and not message.text.startswith("/")
-        and message.from_user.id not in awaiting_image_users
+        message.text and not message.text.startswith("/")
+        and get_user_state(message.from_user.id) == STATE_GENERATE
     )
 
-# Фильтр: фото + пользователь в режиме ожидания векторизации
 def is_vectorization_photo(message):
     return (
         message.photo
-        and message.from_user.id in awaiting_image_users
+        and get_user_state(message.from_user.id) == STATE_VECTORIZE
     )
 
 dp.message.register(start.start, CommandStart())
@@ -35,16 +32,19 @@ dp.message.register(info.info, lambda m: m.text == "ℹ️ Информация"
 dp.message.register(prompt.prompt_for_idea, lambda m: m.text == "🎨 Генерация логотипа")
 dp.message.register(vectorize.ask_for_image, lambda m: m.text == "🖼 Векторизация")
 dp.message.register(vectorize.handle_vectorization_image, is_vectorization_photo)
-dp.message.register(generation.handle_idea, is_text_and_not_in_vector_mode)
+dp.message.register(generation.handle_idea, is_generate_text)
 
-# Универсальный fallback — на все неподдерживаемые типы
 @dp.message()
 async def fallback_handler(message):
-    user_id = message.from_user.id
-    if user_id in awaiting_image_users:
+    state = get_user_state(message.from_user.id)
+    if state == STATE_MENU:
+        await message.answer("❗️Вы сейчас в главном меню. Пожалуйста, выберите действие кнопкой ниже.")
+    elif state == STATE_GENERATE:
+        await message.answer("❗️Ожидается текстовая идея логотипа.")
+    elif state == STATE_VECTORIZE:
         await message.answer("❗️Ожидается изображение (фото) для векторизации.")
     else:
-        await message.answer("❗️Вы сейчас в главном меню. Пожалуйста, выберите действие кнопкой ниже.")
+        await message.answer("❓ Непонятное состояние. Нажмите '⬅️ В меню'.")
 
 if __name__ == "__main__":
     asyncio.run(dp.start_polling(bot))
