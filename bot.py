@@ -30,12 +30,21 @@ def is_vectorization_photo(message):
     )
 
 dp.message.register(start.start, CommandStart())
-dp.message.register(start.start, lambda m: m.text == "⬅️ В меню")  # кнопка "в меню"
+dp.message.register(start.start, lambda m: m.text == "⬅️ В меню")
 dp.message.register(info.info, lambda m: m.text == "ℹ️ Информация")
 dp.message.register(prompt.prompt_for_idea, lambda m: m.text == "🎨 Генерация логотипа")
 dp.message.register(vectorize.ask_for_image, lambda m: m.text == "🖼 Векторизация")
 dp.message.register(vectorize.handle_vectorization_image, is_vectorization_photo)
 dp.message.register(generation.handle_idea, is_text_and_not_in_vector_mode)
+
+# Универсальный fallback — в конце!
+@dp.message()
+async def fallback_handler(message):
+    user_id = message.from_user.id
+    if user_id in awaiting_image_users:
+        await message.answer("❗️Ожидается изображение (фото) для векторизации.")
+    else:
+        await message.answer("❗️Ожидается текст с идеей логотипа. Пожалуйста, напишите словами.")
 
 if __name__ == "__main__":
     asyncio.run(dp.start_polling(bot))

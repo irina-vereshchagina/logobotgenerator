@@ -25,18 +25,6 @@ async def ask_for_image(message: types.Message):
 async def handle_vectorization_image(message: types.Message):
     user_id = message.from_user.id
 
-    # Игнорируем, если пользователь не в режиме векторизации
-    if user_id not in awaiting_image_users:
-        return
-
-    # Если отправлен не файл
-    if not message.photo:
-        await message.answer(
-            "❗️ Пожалуйста, отправьте изображение. "
-            "Если хотите вернуться в меню — нажмите '⬅️ В меню'."
-        )
-        return
-
     if is_generating(user_id):
         await message.answer("⏳ Пожалуйста, дождитесь завершения векторизации.")
         return
@@ -80,4 +68,4 @@ async def handle_vectorization_image(message: types.Message):
             logging.exception("Ошибка при векторизации")
             await message.answer(f"⚠️ Произошла ошибка: {e}")
         finally:
-            set_generating(user_id, False)  # пользователь остаётся в режиме векторизации
+            set_generating(user_id, False)
