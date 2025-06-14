@@ -1,0 +1,283 @@
+📁 Структура проекта:
+
+ - bot.py
+ - config.py
+ - keyboards.py
+ - test.py
+ - tree.py
+ - handlers\generation.py
+ - handlers\info.py
+ - handlers\prompt.py
+ - handlers\start.py
+ - handlers\__init__.py
+ - services\logo_generator.py
+ - services\__init__.py
+ - utils\user_state.py
+ - utils\__init__.py
+
+📄 Содержимое файлов:
+
+
+🔹 bot.py:
+------------------------------------------------------------
+import logging
+import asyncio
+from aiogram import Bot, Dispatcher
+from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
+from aiogram.filters import CommandStart  # ← вот это добавь
+from config import TELEGRAM_BOT_TOKEN
+from handlers import start, info, prompt, generation
+
+logging.basicConfig(level=logging.INFO)
+
+defaults = DefaultBotProperties(parse_mode=ParseMode.HTML)
+bot = Bot(token=TELEGRAM_BOT_TOKEN, default=defaults)
+dp = Dispatcher()
+
+dp.message.register(start.start, CommandStart())
+dp.message.register(info.info, lambda m: m.text == "ℹ️ Информация")
+dp.message.register(prompt.prompt_for_idea, lambda m: m.text == "🎨 Генерация логотипа")
+dp.message.register(generation.handle_idea, lambda m: m.text and not m.text.startswith("/"))
+
+if __name__ == "__main__":
+    asyncio.run(dp.start_polling(bot))
+
+
+🔹 config.py:
+------------------------------------------------------------
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+USE_PLACEHOLDER = os.getenv("USE_PLACEHOLDER")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+
+🔹 keyboards.py:
+------------------------------------------------------------
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+
+def get_main_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🎨 Генерация логотипа")],
+            [KeyboardButton(text="ℹ️ Информация")],
+        ],
+        resize_keyboard=True
+    )
+
+
+🔹 test.py:
+------------------------------------------------------------
+import requests
+import os
+from dotenv import load_dotenv
+
+# Загружаем переменные окружения из .env файла
+load_dotenv()
+
+# Получаем логин и пароль из .env
+user = os.getenv('VECTORIZE_USER')
+password = os.getenv('VECTORIZE_PASS')
+
+# Отправляем запрос
+response = requests.post(
+    'https://ru.vectorizer.ai/api/v1/vectorize',
+    files={'image': open('image.jpg', 'rb')},
+    data={'mode': 'test'},
+    auth=(user, password)
+)
+
+# Обработка результата
+if response.status_code == requests.codes.ok:
+    with open('result.svg', 'wb') as out:
+        out.write(response.content)
+else:
+    print("Error:", response.status_code, response.text)
+git
+
+🔹 tree.py:
+------------------------------------------------------------
+import os
+
+IGNORE_DIRS = {"__pycache__", ".git", "venv", ".venv", "env", ".idea", ".mypy_cache", ".vscode"}
+IGNORE_FILES = {".env"}
+
+def list_files(base_path="."):
+    summary = []
+
+    for root, dirs, files in os.walk(base_path):
+        # Игнорируем ненужные папки
+        dirs[:] = [d for d in dirs if d not in IGNORE_DIRS]
+        files = [f for f in files if f.endswith(".py") and f not in IGNORE_FILES]
+
+        # Строим "относительный путь"
+        rel_root = os.path.relpath(root, base_path)
+        for f in files:
+            path = os.path.join(rel_root, f) if rel_root != "." else f
+            summary.append(path)
+
+    return summary
+
+def print_project_structure(base_path="."):
+    print("📁 Структура проекта:\n")
+    for path in list_files(base_path):
+        print(f" - {path}")
+    print("\n📄 Содержимое файлов:\n")
+
+    for path in list_files(base_path):
+        print(f"\n🔹 {path}:\n{'-'*60}")
+        with open(os.path.join(base_path, path), "r", encoding="utf-8") as f:
+            print(f.read())
+
+if __name__ == "__main__":
+    import sys
+    with open('tree.txt', "w", encoding="utf-8") as f:
+        sys.stdout = f  # перенаправляем print в файл
+        print_project_structure()
+
+
+🔹 handlers\generation.py:
+------------------------------------------------------------
+from aiogram import types
+from utils.user_state import single_user_lock, is_generating, set_generating
+from services.logo_generator import generate_image
+from aiogram.types import BufferedInputFile
+import logging
+
+async def handle_idea(message: types.Message):
+    user_id = message.from_user.id
+
+    if is_generating(user_id):
+        await message.answer("⏳ Пожалуйста, дождитесь завершения генерации логотипа.")
+        return
+
+    async with single_user_lock(user_id):
+        set_generating(user_id, True)
+        await message.answer("Генерирую логотип, подожди немного...")
+        try:
+            image = await generate_image(message.text)
+            image.seek(0)
+            input_file = BufferedInputFile(file=image.read(), filename="logo.png")
+            await message.answer_photo(photo=input_file, caption="Вот логотип по твоей идее!")
+            await message.answer("💡 Пришли ещё идею для генерации логотипа!")
+        except Exception as e:
+            logging.exception("Ошибка при генерации")
+            await message.answer(f"Произошла ошибка: {e}")
+        finally:
+            set_generating(user_id, False)
+
+
+🔹 handlers\info.py:
+------------------------------------------------------------
+from aiogram import types
+
+async def info(message: types.Message):
+    await message.answer(
+        "Генерация логотипов через GPT-4o + DALL·E 3.\n\n"
+        "Жми '🎨 Генерация логотипа' и отправь идею."
+    )
+
+
+🔹 handlers\prompt.py:
+------------------------------------------------------------
+from aiogram import types
+
+async def prompt_for_idea(message: types.Message):
+    await message.answer(
+        "✍️ Отправь идею логотипа (например: 'логотип для кофейни в минималистичном стиле')",
+    )
+
+
+🔹 handlers\start.py:
+------------------------------------------------------------
+from aiogram import types
+from aiogram.filters import CommandStart
+from keyboards import get_main_keyboard
+
+async def start(message: types.Message):
+    await message.answer(
+        "👋 Привет! Я помогу сгенерировать логотип. Выбери действие:",
+        reply_markup=get_main_keyboard()
+    )
+
+
+🔹 handlers\__init__.py:
+------------------------------------------------------------
+
+
+🔹 services\logo_generator.py:
+------------------------------------------------------------
+import requests
+from io import BytesIO
+import asyncio
+from config import USE_PLACEHOLDER, OPENAI_API_KEY
+
+async def generate_image(prompt: str) -> BytesIO:
+    if USE_PLACEHOLDER:
+        await asyncio.sleep(2)
+        url = "https://picsum.photos/1024"
+        response = requests.get(url)
+        response.raise_for_status()
+        return BytesIO(response.content)
+
+    from openai import OpenAI
+    client = OpenAI(api_key=OPENAI_API_KEY)
+
+    chat = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": "Ты создаешь промпт для генерации логотипа через DALL·E 3."},
+            {"role": "user", "content": prompt}
+        ]
+    )
+
+    prompt_dalle = chat.choices[0].message.content.strip()
+
+    image_response = client.images.generate(
+        model="dall-e-3",
+        prompt=prompt_dalle,
+        n=1,
+        size="1024x1024",
+        quality="standard",
+        style="vivid",
+    )
+
+    image_url = image_response.data[0].url
+    img_data = requests.get(image_url)
+    img_data.raise_for_status()
+
+    return BytesIO(img_data.content)
+
+
+🔹 services\__init__.py:
+------------------------------------------------------------
+
+
+🔹 utils\user_state.py:
+------------------------------------------------------------
+import asyncio
+from contextlib import asynccontextmanager
+
+user_locks = {}
+user_generation_flags = {}
+
+@asynccontextmanager
+async def single_user_lock(user_id: int):
+    lock = user_locks.setdefault(user_id, asyncio.Lock())
+    async with lock:
+        yield
+
+def is_generating(user_id):
+    return user_generation_flags.get(user_id, False)
+
+def set_generating(user_id, value: bool):
+    user_generation_flags[user_id] = value
+
+
+🔹 utils\__init__.py:
+------------------------------------------------------------
+
