@@ -50,16 +50,13 @@ async def single_user_lock(user_id: int):
     async with lock:
         yield
 
-# Старт бота
 @dp.message(lambda m: m.text == "/start")
 async def start(message: types.Message):
-    print(f"🔥 Получен /start от {message.from_user.id}")
     await message.answer(
         "👋 Привет! Я помогу сгенерировать логотип или перевести изображение в SVG.\n\nВыбери действие:",
         reply_markup=get_main_keyboard()
     )
 
-# Информация
 @dp.message(lambda m: m.text == "ℹ️ Информация")
 async def info(message: types.Message):
     await message.answer(
@@ -69,12 +66,15 @@ async def info(message: types.Message):
         "Выбери нужное действие с помощью кнопок."
     )
 
-# Генерация логотипа — ввод идеи
 @dp.message(lambda m: m.text == "🎨 Генерация логотипа")
 async def prompt_for_idea(message: types.Message):
-    await message.answer("✍️ Отправь идею логотипа (например: 'логотип для кофейни в минималистичном стиле')")
+    await message.answer("✍️ Отправь идею логотипа (" +
+                         "например: 'логотип для кофейни в минималистичном стиле')")
 
-# Обработка текстовой идеи логотипа
+@dp.message(lambda m: m.text and m.from_user.id in user_svg_mode)
+async def reject_text_in_svg_mode(message: types.Message):
+    await message.answer("⚠️ Пожалуйста, отправьте изображение, а не текст.")
+
 @dp.message(lambda m: m.text and not m.text.startswith("/") and m.from_user.id not in user_svg_mode)
 async def handle_idea(message: types.Message):
     user_id = message.from_user.id
@@ -98,19 +98,12 @@ async def handle_idea(message: types.Message):
         finally:
             user_generation_flags[user_id] = False
 
-# Обработка кнопки SVG
 @dp.message(lambda m: m.text == "🖼️ Image to SVG")
 async def image_to_svg_prompt(message: types.Message):
     user_id = message.from_user.id
     user_svg_mode.add(user_id)
     await message.answer("📤 Отправьте изображение, которое хотите перевести в вектор (SVG).")
 
-# Если пользователь в режиме SVG, но отправил текст
-@dp.message(lambda m: m.text and m.from_user.id in user_svg_mode)
-async def reject_text_in_svg_mode(message: types.Message):
-    await message.answer("⚠️ Пожалуйста, отправьте изображение, а не текст.")
-
-# Обработка изображения для SVG
 @dp.message(lambda m: m.photo or m.document)
 async def handle_svg_conversion(message: types.Message):
     user_id = message.from_user.id
@@ -123,13 +116,11 @@ async def handle_svg_conversion(message: types.Message):
         file_path = file_info.file_path
         file_url = f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file_path}"
 
-        # Скачивание изображения
         image_data = requests.get(file_url)
         image_data.raise_for_status()
         with open("temp_image.jpg", "wb") as f:
             f.write(image_data.content)
 
-        # Отправка в vectorizer.ai
         response = requests.post(
             'https://ru.vectorizer.ai/api/v1/vectorize',
             files={'image': open('temp_image.jpg', 'rb')},
@@ -157,7 +148,6 @@ async def handle_svg_conversion(message: types.Message):
         except:
             pass
 
-# Генерация логотипа через OpenAI
 async def generate_image(prompt: str) -> BytesIO:
     if USE_PLACEHOLDER:
         await asyncio.sleep(2)
@@ -198,6 +188,5 @@ async def generate_image(prompt: str) -> BytesIO:
     image.name = "logo.png"
     return image
 
-# Запуск бота
 if __name__ == "__main__":
     asyncio.run(dp.start_polling(bot))
