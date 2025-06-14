@@ -23,7 +23,7 @@ def is_text_and_not_in_vector_mode(message):
     )
 
 dp.message.register(start.start, CommandStart())
-dp.message.register(start.start, lambda m: m.text == "⬅️ В меню")  # кнопка выхода
+dp.message.register(start.start, lambda m: m.text == "⬅️ В меню")  # кнопка "в меню"
 dp.message.register(info.info, lambda m: m.text == "ℹ️ Информация")
 dp.message.register(prompt.prompt_for_idea, lambda m: m.text == "🎨 Генерация логотипа")
 dp.message.register(vectorize.ask_for_image, lambda m: m.text == "🖼 Векторизация")

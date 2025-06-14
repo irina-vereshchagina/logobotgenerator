@@ -80,5 +80,4 @@ async def handle_vectorization_image(message: types.Message):
             logging.exception("Ошибка при векторизации")
             await message.answer(f"⚠️ Произошла ошибка: {e}")
         finally:
-            # ❗ НЕ убираем пользователя из режима векторизации — он остаётся там
-            set_generating(user_id, False)
+            set_generating(user_id, False)  # пользователь остаётся в режиме векторизации
