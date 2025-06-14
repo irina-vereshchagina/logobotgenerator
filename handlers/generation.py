@@ -7,6 +7,11 @@ import logging
 async def handle_idea(message: types.Message):
     user_id = message.from_user.id
 
+    # Если это не текст (например, фото, файл, стикер, голос и т.д.)
+    if not message.text:
+        await message.answer("❗️Ожидается текст с идеей логотипа. Пожалуйста, отправьте идею словами.")
+        return
+
     if is_generating(user_id):
         await message.answer("⏳ Пожалуйста, дождитесь завершения генерации логотипа.")
         return
@@ -19,7 +24,7 @@ async def handle_idea(message: types.Message):
             image.seek(0)
             input_file = BufferedInputFile(file=image.read(), filename="logo.png")
             await message.answer_photo(photo=input_file, caption="Вот логотип по твоей идее!")
-            await message.answer("💡 Пришли ещё идею для генерации логотипа!")
+            await message.answer("💡 Пришли ещё идею для генерации логотипа или нажми '⬅️ В меню'.")
         except Exception as e:
             logging.exception("Ошибка при генерации")
             await message.answer(f"Произошла ошибка: {e}")
