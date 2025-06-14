@@ -37,14 +37,14 @@ dp.message.register(vectorize.ask_for_image, lambda m: m.text == "🖼 Вект�
 dp.message.register(vectorize.handle_vectorization_image, is_vectorization_photo)
 dp.message.register(generation.handle_idea, is_text_and_not_in_vector_mode)
 
-# Универсальный fallback — в конце!
+# Универсальный fallback — на все неподдерживаемые типы
 @dp.message()
 async def fallback_handler(message):
     user_id = message.from_user.id
     if user_id in awaiting_image_users:
         await message.answer("❗️Ожидается изображение (фото) для векторизации.")
     else:
-        await message.answer("❗️Ожидается текст с идеей логотипа. Пожалуйста, напишите словами.")
+        await message.answer("❗️Вы сейчас в главном меню. Пожалуйста, выберите действие кнопкой ниже.")
 
 if __name__ == "__main__":
     asyncio.run(dp.start_polling(bot))
