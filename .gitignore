@@ -1,2 +1,6 @@
 .env
 .venv
+result.svg
+.vscode/
+test/
+image.jpg
