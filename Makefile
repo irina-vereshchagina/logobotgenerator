@@ -7,3 +7,9 @@ mockon:
 	export USE_PLACEHOLDER=true
 mockoff:
 	export USE_PLACEHOLDER=false
+push:
+	git add .
+	git commit -m 'upd'
+	git push
+pull:
+	git pull
