@@ -1,6 +1,6 @@
 from aiogram import types
 from aiogram.types import BufferedInputFile
-from utils.user_state import single_user_lock
+from utils.user_state import single_user_lock, is_generating, set_generating
 import logging
 import os
 import requests
@@ -11,7 +11,7 @@ load_dotenv()
 VECTORIZE_USER = os.getenv("VECTORIZE_USER")
 VECTORIZE_PASS = os.getenv("VECTORIZE_PASS")
 
-# Флаг состояния — ждём изображение?
+# Пользователи, которые ожидают отправки изображения
 awaiting_image_users = set()
 
 async def ask_for_image(message: types.Message):
@@ -21,14 +21,22 @@ async def ask_for_image(message: types.Message):
 
 async def handle_vectorization_image(message: types.Message):
     user_id = message.from_user.id
+
+    # Обрабатываем только если пользователь в режиме ожидания картинки
     if user_id not in awaiting_image_users:
-        return  # Игнорируем нецелевые изображения
+        return
+
+    # Уже выполняется векторизация — не даём продолжить
+    if is_generating(user_id):
+        await message.answer("⏳ Пожалуйста, дождитесь завершения векторизации.")
+        return
 
     if not message.photo:
         await message.answer("❗️ Пожалуйста, отправьте именно изображение, не файл и не текст.")
         return
 
     async with single_user_lock(user_id):
+        set_generating(user_id, True)
         try:
             photo = message.photo[-1]
             file = await message.bot.get_file(photo.file_id)
@@ -67,3 +75,4 @@ async def handle_vectorization_image(message: types.Message):
             await message.answer(f"⚠️ Произошла ошибка: {e}")
         finally:
             awaiting_image_users.discard(user_id)
+            set_generating(user_id, False)
