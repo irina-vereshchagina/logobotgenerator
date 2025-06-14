@@ -1,6 +1,7 @@
 from aiogram import types
 from aiogram.types import BufferedInputFile
 from utils.user_state import single_user_lock, is_generating, set_generating
+from keyboards import get_back_keyboard
 import logging
 import os
 import requests
@@ -11,32 +12,33 @@ load_dotenv()
 VECTORIZE_USER = os.getenv("VECTORIZE_USER")
 VECTORIZE_PASS = os.getenv("VECTORIZE_PASS")
 
-# Пользователи, которые ожидают отправки изображения
 awaiting_image_users = set()
 
 async def ask_for_image(message: types.Message):
     user_id = message.from_user.id
     awaiting_image_users.add(user_id)
-    await message.answer("📤 Пожалуйста, пришли изображение для векторизации (JPG, PNG и т.д.).")
+    await message.answer(
+        "📤 Пожалуйста, пришли изображение для векторизации (JPG, PNG и т.д.).",
+        reply_markup=get_back_keyboard()
+    )
 
 async def handle_vectorization_image(message: types.Message):
     user_id = message.from_user.id
 
-    # Обрабатываем только если пользователь в режиме ожидания картинки
+    # Игнорируем, если пользователь не в режиме векторизации
     if user_id not in awaiting_image_users:
         return
 
-    # Уже выполняется векторизация — не даём продолжить
-    if is_generating(user_id):
-        await message.answer("⏳ Пожалуйста, дождитесь завершения векторизации.")
-        return
-
-    # Пользователь отправил текст вместо изображения
+    # Если отправлен не файл
     if not message.photo:
         await message.answer(
-            "❗️ Пожалуйста, отправьте изображение (JPG, PNG). "
-            "Если вы хотите сгенерировать логотип по идее — нажмите '🎨 Генерация логотипа'."
+            "❗️ Пожалуйста, отправьте изображение. "
+            "Если хотите вернуться в меню — нажмите '⬅️ В меню'."
         )
+        return
+
+    if is_generating(user_id):
+        await message.answer("⏳ Пожалуйста, дождитесь завершения векторизации.")
         return
 
     async with single_user_lock(user_id):
@@ -78,5 +80,5 @@ async def handle_vectorization_image(message: types.Message):
             logging.exception("Ошибка при векторизации")
             await message.answer(f"⚠️ Произошла ошибка: {e}")
         finally:
-            awaiting_image_users.discard(user_id)
+            # ❗ НЕ убираем пользователя из режима векторизации — он остаётся там
             set_generating(user_id, False)
