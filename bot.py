@@ -3,6 +3,7 @@ import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+from aiogram.filters import CommandStart  # ← вот это добавь
 from config import TELEGRAM_BOT_TOKEN
 from handlers import start, info, prompt, generation
 
