@@ -17,7 +17,7 @@ async def ask_for_image(message: types.Message):
     user_id = message.from_user.id
     role = get_user_role(user_id)
     if ROLE_LIMITS[role]["vectorizations"] == 0:
-        await message.answer("❌ В вашей роли векторизация недоступна. Обновите роль.")
+        await message.answer("❌ В вашей роли векторизация недоступна. Обновите роль.", reply_markup=get_back_keyboard())
         return
     set_user_state(user_id, STATE_VECTORIZE)
     await message.answer("📤 Пришли изображение для векторизации.", reply_markup=get_back_keyboard())
@@ -35,11 +35,11 @@ async def handle_vectorization_image(message: types.Message):
             f"❌ Вы исчерпали лимит <b>векторизаций</b> для вашей роли.\n\n"
             f"🖼 Векторизаций: {v_used} / {v_total}\n"
             f"ℹ️ Посмотреть лимиты можно через 'ℹ️ Информация'"
-        )
+        , reply_markup=get_back_keyboard())
         return
 
     if is_generating(user_id):
-        await message.answer("⏳ Пожалуйста, дождитесь завершения векторизации.")
+        await message.answer("⏳ Пожалуйста, дождитесь завершения векторизации.", reply_markup=get_back_keyboard())
         return
 
     async with single_user_lock(user_id):
@@ -53,7 +53,7 @@ async def handle_vectorization_image(message: types.Message):
             with open(temp_path, "wb") as f:
                 f.write(downloaded_file.read())
 
-            await message.answer("🔄 Векторизую изображение, подождите...")
+            await message.answer("🔄 Векторизую изображение, подождите...", reply_markup=get_back_keyboard())
 
             with open(temp_path, "rb") as img:
                 response = requests.post(
@@ -80,13 +80,13 @@ async def handle_vectorization_image(message: types.Message):
                 role = get_user_role(user_id)
                 usage = get_usage(user_id)
                 v_left = ROLE_LIMITS[role]["vectorizations"] - usage["vectorizations"]
-                await message.answer(f"📊 Осталось векторизаций: {v_left}")
+                await message.answer(f"📊 Осталось векторизаций: {v_left}", reply_markup=get_back_keyboard())
 
             else:
-                await message.answer(f"❌ Ошибка векторизации: {response.status_code}\n{response.text}")
+                await message.answer(f"❌ Ошибка векторизации: {response.status_code}\n{response.text}", reply_markup=get_back_keyboard())
 
         except Exception as e:
             logging.exception("Ошибка при векторизации")
-            await message.answer(f"⚠️ Произошла ошибка: {e}")
+            await message.answer(f"⚠️ Произошла ошибка: {e}", reply_markup=get_back_keyboard())
         finally:
             set_generating(user_id, False)
