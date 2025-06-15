@@ -1,10 +1,16 @@
 from aiogram import types
+from aiogram.fsm.context import FSMContext
+from utils.states import GenerationStates
 from utils.user_state import single_user_lock, is_generating, set_generating
 from services.logo_generator import generate_image
 from aiogram.types import BufferedInputFile
 import logging
 
-async def handle_idea(message: types.Message):
+async def handle_idea(message: types.Message, state: FSMContext):
+    state_now = await state.get_state()
+    if state_now != GenerationStates.waiting_for_idea:
+        return  # Игнорируем, если пользователь не в нужном режиме
+
     user_id = message.from_user.id
 
     if not message.text:

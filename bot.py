@@ -9,10 +9,11 @@ from handlers import start, info, prompt, generation, vectorize
 from utils.user_state import get_user_state, STATE_GENERATE, STATE_VECTORIZE, STATE_MENU
 
 logging.basicConfig(level=logging.INFO)
+logging.getLogger("aiogram.event").setLevel(logging.DEBUG)
 
 defaults = DefaultBotProperties(parse_mode=ParseMode.HTML)
 bot = Bot(token=TELEGRAM_BOT_TOKEN, default=defaults)
-dp = Dispatcher()
+dp = Dispatcher(storage=MemoryStorage())
 
 def is_generate_text(message):
     return (
