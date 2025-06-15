@@ -7,10 +7,13 @@ from aiogram.types import BufferedInputFile
 import logging
 
 async def handle_idea(message: types.Message, state: FSMContext):
+    # Получаем текущее состояние FSM
     state_now = await state.get_state()
 
-    if state_now != GenerationStates.waiting_for_idea:
-        return  # Игнорируем, если пользователь не в нужном режиме
+    # Сравниваем корректно — через .state
+    if state_now != GenerationStates.waiting_for_idea.state:
+        print("[DEBUG] Пользователь не в состоянии ожидания идеи, игнорируем сообщение")
+        return
 
     user_id = message.from_user.id
 
