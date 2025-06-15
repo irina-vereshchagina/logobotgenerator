@@ -4,10 +4,11 @@ from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import CommandStart
-from aiogram.fsm.storage.memory import MemoryStorage  # <- ВАЖНО: добавьте это
+from aiogram.fsm.storage.memory import MemoryStorage
 from config import TELEGRAM_BOT_TOKEN
 from handlers import start, info, prompt, generation, vectorize
 from utils.user_state import get_user_state, STATE_GENERATE, STATE_VECTORIZE, STATE_MENU
+from utils.user_roles import load_db  # 👈 Загрузка лимитов из файла
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("aiogram.event").setLevel(logging.DEBUG)
@@ -49,4 +50,5 @@ async def fallback_handler(message):
         await message.answer("❓ Непонятное состояние. Нажмите '⬅️ В меню'.")
 
 if __name__ == "__main__":
+    load_db()  # 👈 загружаем лимиты
     asyncio.run(dp.start_polling(bot))

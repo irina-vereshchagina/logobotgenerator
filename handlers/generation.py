@@ -5,20 +5,21 @@ from utils.user_state import single_user_lock, is_generating, set_generating
 from services.logo_generator import generate_image
 from aiogram.types import BufferedInputFile
 import logging
+from utils.user_roles import can_generate, increment_usage
 
 async def handle_idea(message: types.Message, state: FSMContext):
-    # Получаем текущее состояние FSM
     state_now = await state.get_state()
-
-    # Сравниваем корректно — через .state
     if state_now != GenerationStates.waiting_for_idea.state:
-        print("[DEBUG] Пользователь не в состоянии ожидания идеи, игнорируем сообщение")
         return
 
     user_id = message.from_user.id
 
     if not message.text:
-        await message.answer("❗️Ожидается текст с идеей логотипа. Пожалуйста, напишите словами.")
+        await message.answer("❗️Ожидается текст с идеей логотипа.")
+        return
+
+    if not can_generate(user_id):
+        await message.answer("❌ Вы исчерпали лимит генераций для вашей роли.")
         return
 
     if is_generating(user_id):
@@ -34,6 +35,7 @@ async def handle_idea(message: types.Message, state: FSMContext):
             input_file = BufferedInputFile(file=image.read(), filename="logo.png")
             await message.answer_photo(photo=input_file, caption="Вот логотип по твоей идее!")
             await message.answer("💡 Пришли ещё идею или нажми '⬅️ В меню'.")
+            increment_usage(user_id, "generations")
         except Exception as e:
             logging.exception("Ошибка при генерации")
             await message.answer(f"Произошла ошибка: {e}")

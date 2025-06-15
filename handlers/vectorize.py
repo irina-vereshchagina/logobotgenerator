@@ -6,6 +6,7 @@ import logging
 import os
 import requests
 from dotenv import load_dotenv
+from utils.user_roles import can_vectorize, increment_usage
 
 load_dotenv()
 
@@ -15,13 +16,14 @@ VECTORIZE_PASS = os.getenv("VECTORIZE_PASS")
 async def ask_for_image(message: types.Message):
     user_id = message.from_user.id
     set_user_state(user_id, STATE_VECTORIZE)
-    await message.answer(
-        "📤 Пожалуйста, пришли изображение для векторизации (JPG, PNG и т.д.).",
-        reply_markup=get_back_keyboard()
-    )
+    await message.answer("📤 Пришли изображение для векторизации.", reply_markup=get_back_keyboard())
 
 async def handle_vectorization_image(message: types.Message):
     user_id = message.from_user.id
+
+    if not can_vectorize(user_id):
+        await message.answer("❌ Вы исчерпали лимит векторизаций для вашей роли.")
+        return
 
     if is_generating(user_id):
         await message.answer("⏳ Пожалуйста, дождитесь завершения векторизации.")
@@ -59,6 +61,7 @@ async def handle_vectorization_image(message: types.Message):
                     svg_file = BufferedInputFile(file=f.read(), filename="vectorized.svg")
                     await message.answer_document(document=svg_file, caption="✅ Векторизация завершена!")
                 os.remove(svg_path)
+                increment_usage(user_id, "vectorizations")
             else:
                 await message.answer(f"❌ Ошибка векторизации: {response.status_code}\n{response.text}")
 
