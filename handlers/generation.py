@@ -45,6 +45,13 @@ async def handle_idea(message: types.Message, state: FSMContext):
             await message.answer_photo(photo=input_file, caption="Вот логотип по твоей идее!")
             await message.answer("💡 Пришли ещё идею или нажми '⬅️ В меню'.")
             increment_usage(user_id, "generations")
+
+            # Добавляем сообщение об оставшемся лимите
+            role = get_user_role(user_id)
+            usage = get_usage(user_id)
+            g_left = ROLE_LIMITS[role]["generations"] - usage["generations"]
+            await message.answer(f"📊 Осталось генераций: {g_left}")
+
         except Exception as e:
             logging.exception("Ошибка при генерации")
             await message.answer(f"Произошла ошибка: {e}")

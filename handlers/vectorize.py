@@ -15,6 +15,10 @@ VECTORIZE_PASS = os.getenv("VECTORIZE_PASS")
 
 async def ask_for_image(message: types.Message):
     user_id = message.from_user.id
+    role = get_user_role(user_id)
+    if ROLE_LIMITS[role]["vectorizations"] == 0:
+        await message.answer("❌ В вашей роли векторизация недоступна. Обновите роль через 'ℹ️ Информация'.")
+        return
     set_user_state(user_id, STATE_VECTORIZE)
     await message.answer("📤 Пришли изображение для векторизации.", reply_markup=get_back_keyboard())
 
@@ -71,6 +75,13 @@ async def handle_vectorization_image(message: types.Message):
                     await message.answer_document(document=svg_file, caption="✅ Векторизация завершена!")
                 os.remove(svg_path)
                 increment_usage(user_id, "vectorizations")
+
+                # Добавляем сообщение об оставшемся лимите
+                role = get_user_role(user_id)
+                usage = get_usage(user_id)
+                v_left = ROLE_LIMITS[role]["vectorizations"] - usage["vectorizations"]
+                await message.answer(f"📊 Осталось векторизаций: {v_left}")
+
             else:
                 await message.answer(f"❌ Ошибка векторизации: {response.status_code}\n{response.text}")
 
