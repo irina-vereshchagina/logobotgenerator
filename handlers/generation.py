@@ -8,7 +8,6 @@ import logging
 
 async def handle_idea(message: types.Message, state: FSMContext):
     state_now = await state.get_state()
-    logging.info(f"[handle_idea] FSM-состояние: {state_now}")  # ← Отладочный лог
 
     if state_now != GenerationStates.waiting_for_idea:
         return  # Игнорируем, если пользователь не в нужном режиме
