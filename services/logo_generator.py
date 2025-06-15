@@ -6,7 +6,7 @@ from config import USE_PLACEHOLDER, OPENAI_API_KEY
 async def generate_image(prompt: str) -> BytesIO:
     if USE_PLACEHOLDER:
         await asyncio.sleep(2)
-        url = "https://picsum.photos/1024"
+        url = "https://placehold.co/1024x1024/png?text=Logo"
         response = requests.get(url)
         response.raise_for_status()
         return BytesIO(response.content)
