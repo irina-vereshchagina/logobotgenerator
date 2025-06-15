@@ -23,4 +23,3 @@ if response.status_code == requests.codes.ok:
         out.write(response.content)
 else:
     print("Error:", response.status_code, response.text)
-git
