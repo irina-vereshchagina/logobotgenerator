@@ -47,6 +47,8 @@ def get_user_role(user_id: int) -> str:
 def set_user_role(user_id: int, role: str):
     init_user(user_id)
     user_data[str(user_id)]["role"] = role
+    user_data[str(user_id)]["generations"] = 0  # Сброс генераций
+    user_data[str(user_id)]["vectorizations"] = 0  # Сброс векторизаций
     save_db()
 
 def get_usage(user_id: int):

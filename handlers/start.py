@@ -1,3 +1,5 @@
+# handlers/start.py
+
 from aiogram import types
 from keyboards import get_main_keyboard
 from utils.user_state import set_user_state, STATE_MENU
@@ -49,4 +51,7 @@ async def setrole_command(message: types.Message):
         return
 
     set_user_role(user_id, new_role)
-    await message.answer(f"✅ Ваша роль обновлена: <b>{new_role}</b>")
+    await message.answer(
+        f"✅ Ваша роль обновлена: <b>{new_role}</b>\n"
+        f"🔁 Лимиты генераций и векторизаций были обнулены."
+    )

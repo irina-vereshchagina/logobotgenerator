@@ -28,12 +28,12 @@ import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from aiogram.fsm.storage.memory import MemoryStorage
 from config import TELEGRAM_BOT_TOKEN
 from handlers import start, info, prompt, generation, vectorize
 from utils.user_state import get_user_state, STATE_GENERATE, STATE_VECTORIZE, STATE_MENU
-from utils.user_roles import load_db  # 👈 Загрузка лимитов из файла
+from utils.user_roles import load_db
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("aiogram.event").setLevel(logging.DEBUG)
@@ -54,7 +54,9 @@ def is_vectorization_photo(message):
         and get_user_state(message.from_user.id) == STATE_VECTORIZE
     )
 
+# Регистрация хендлеров
 dp.message.register(start.start, CommandStart())
+dp.message.register(start.setrole_command, Command(commands=["setrole"]))
 dp.message.register(start.start, lambda m: m.text == "⬅️ В меню")
 dp.message.register(info.info, lambda m: m.text == "ℹ️ Информация")
 dp.message.register(prompt.prompt_for_idea, lambda m: m.text == "🎨 Генерация логотипа")
@@ -75,7 +77,7 @@ async def fallback_handler(message):
         await message.answer("❓ Непонятное состояние. Нажмите '⬅️ В меню'.")
 
 if __name__ == "__main__":
-    load_db()  # 👈 загружаем лимиты
+    load_db()
     asyncio.run(dp.start_polling(bot))
 
 
@@ -150,7 +152,7 @@ else:
 ------------------------------------------------------------
 import os
 
-IGNORE_DIRS = {"__pycache__", ".git", "venv", ".venv", "env", ".idea", ".mypy_cache", ".vscode"}
+IGNORE_DIRS = {"__init__.py", "tests", "__pycache__", ".git", "venv", ".venv", "env", ".idea", ".mypy_cache", ".vscode"}
 IGNORE_FILES = {".env"}
 
 def list_files(base_path="."):
@@ -309,49 +311,48 @@ SETROLE_PASSWORD = "qweqweqwe"
 
 async def start(message: types.Message):
     user_id = message.from_user.id
-    text = message.text.strip()
-
-    if text.startswith("/setrole me"):
-        parts = text.split()
-        if len(parts) != 4:
-            await message.answer(
-                "❓ Формат команды:\n"
-                "<code>/setrole me ... user_basic</code>\n"
-                "<code>/setrole me ... up</code>\n"
-                "<code>/setrole me ... down</code>"
-            )
-            return
-
-        _, _, password, action = parts
-
-        if password != SETROLE_PASSWORD:
-            await message.answer("❌ Неверный пароль.")
-            return
-
-        current_role = get_user_role(user_id)
-        current_index = ROLE_ORDER.index(current_role)
-
-        if action == "up":
-            new_index = min(current_index + 1, len(ROLE_ORDER) - 1)
-            new_role = ROLE_ORDER[new_index]
-        elif action == "down":
-            new_index = max(current_index - 1, 0)
-            new_role = ROLE_ORDER[new_index]
-        elif action in ROLE_ORDER:
-            new_role = action
-        else:
-            await message.answer("❌ Неверная роль. Допустимые значения: user_free, user_basic, user_pro, admin, up, down.")
-            return
-
-        set_user_role(user_id, new_role)
-        await message.answer(f"✅ Ваша роль обновлена: <b>{new_role}</b>")
-        return
-
     set_user_state(user_id, STATE_MENU)
     await message.answer(
         "👋 Привет! Я помогу сгенерировать логотип. Выбери действие:",
         reply_markup=get_main_keyboard()
     )
+
+async def setrole_command(message: types.Message):
+    user_id = message.from_user.id
+    parts = message.text.strip().split()
+
+    if len(parts) != 4 or parts[0] != "/setrole" or parts[1] != "me":
+        await message.answer(
+            "❓ Формат команды:\n"
+            "<code>/setrole me ПАРОЛЬ user_basic</code>\n"
+            "<code>/setrole me ПАРОЛЬ up</code>\n"
+            "<code>/setrole me ПАРОЛЬ down</code>"
+        )
+        return
+
+    _, _, password, action = parts
+
+    if password != SETROLE_PASSWORD:
+        await message.answer("❌ Неверный пароль.")
+        return
+
+    current_role = get_user_role(user_id)
+    current_index = ROLE_ORDER.index(current_role)
+
+    if action == "up":
+        new_index = min(current_index + 1, len(ROLE_ORDER) - 1)
+        new_role = ROLE_ORDER[new_index]
+    elif action == "down":
+        new_index = max(current_index - 1, 0)
+        new_role = ROLE_ORDER[new_index]
+    elif action in ROLE_ORDER:
+        new_role = action
+    else:
+        await message.answer("❌ Неверная роль. Допустимые значения: user_free, user_basic, user_pro, admin, up, down.")
+        return
+
+    set_user_role(user_id, new_role)
+    await message.answer(f"✅ Ваша роль обновлена: <b>{new_role}</b>")
 
 
 🔹 handlers\vectorize.py:
@@ -463,7 +464,7 @@ from config import USE_PLACEHOLDER, OPENAI_API_KEY
 
 async def generate_image(prompt: str) -> BytesIO:
     if USE_PLACEHOLDER:
-        await asyncio.sleep(2)
+        # await asyncio.sleep(0.)
         url = "https://placehold.co/1024x1024/png?text=Logo"
         response = requests.get(url)
         response.raise_for_status()

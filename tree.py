@@ -1,6 +1,6 @@
 import os
 
-IGNORE_DIRS = {"__pycache__", ".git", "venv", ".venv", "env", ".idea", ".mypy_cache", ".vscode"}
+IGNORE_DIRS = {"__init__.py", "tests", "__pycache__", ".git", "venv", ".venv", "env", ".idea", ".mypy_cache", ".vscode"}
 IGNORE_FILES = {".env"}
 
 def list_files(base_path="."):
