@@ -1,5 +1,3 @@
-# handlers/start.py
-
 from aiogram import types
 from keyboards import get_main_keyboard
 from utils.user_state import set_user_state, STATE_MENU
@@ -25,14 +23,15 @@ async def setrole_command(message: types.Message):
             "❓ Формат команды:\n"
             "<code>/setrole me ПАРОЛЬ user_basic</code>\n"
             "<code>/setrole me ПАРОЛЬ up</code>\n"
-            "<code>/setrole me ПАРОЛЬ down</code>"
+            "<code>/setrole me ПАРОЛЬ down</code>",
+            reply_markup=get_main_keyboard()
         )
         return
 
     _, _, password, action = parts
 
     if password != SETROLE_PASSWORD:
-        await message.answer("❌ Неверный пароль.")
+        await message.answer("❌ Неверный пароль.", reply_markup=get_main_keyboard())
         return
 
     current_role = get_user_role(user_id)
@@ -47,11 +46,15 @@ async def setrole_command(message: types.Message):
     elif action in ROLE_ORDER:
         new_role = action
     else:
-        await message.answer("❌ Неверная роль. Допустимые значения: user_free, user_basic, user_pro, admin, up, down.")
+        await message.answer(
+            "❌ Неверная роль. Допустимые значения: user_free, user_basic, user_pro, admin, up, down.",
+            reply_markup=get_main_keyboard()
+        )
         return
 
     set_user_role(user_id, new_role)
     await message.answer(
         f"✅ Ваша роль обновлена: <b>{new_role}</b>\n"
-        f"🔁 Лимиты генераций и векторизаций были обнулены."
+        f"🔁 Лимиты генераций и векторизаций были обнулены.",
+        reply_markup=get_main_keyboard()
     )
