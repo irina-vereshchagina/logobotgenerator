@@ -6,7 +6,7 @@ import logging
 import os
 import requests
 from dotenv import load_dotenv
-from utils.user_roles import can_vectorize, increment_usage
+from utils.user_roles import can_vectorize, increment_usage, get_usage, get_user_role, ROLE_LIMITS
 
 load_dotenv()
 
@@ -22,7 +22,16 @@ async def handle_vectorization_image(message: types.Message):
     user_id = message.from_user.id
 
     if not can_vectorize(user_id):
-        await message.answer("❌ Вы исчерпали лимит векторизаций для вашей роли.")
+        usage = get_usage(user_id)
+        role = get_user_role(user_id)
+        v_used = usage["vectorizations"]
+        v_total = ROLE_LIMITS[role]["vectorizations"]
+
+        await message.answer(
+            f"❌ Вы исчерпали лимит <b>векторизаций</b> для вашей роли.\n\n"
+            f"🖼 Векторизаций: {v_used} / {v_total}\n"
+            f"ℹ️ Посмотреть лимиты можно через 'ℹ️ Информация'"
+        )
         return
 
     if is_generating(user_id):

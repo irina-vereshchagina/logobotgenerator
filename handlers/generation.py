@@ -5,7 +5,7 @@ from utils.user_state import single_user_lock, is_generating, set_generating
 from services.logo_generator import generate_image
 from aiogram.types import BufferedInputFile
 import logging
-from utils.user_roles import can_generate, increment_usage
+from utils.user_roles import can_generate, increment_usage, get_usage, get_user_role, ROLE_LIMITS
 
 async def handle_idea(message: types.Message, state: FSMContext):
     state_now = await state.get_state()
@@ -19,7 +19,16 @@ async def handle_idea(message: types.Message, state: FSMContext):
         return
 
     if not can_generate(user_id):
-        await message.answer("❌ Вы исчерпали лимит генераций для вашей роли.")
+        usage = get_usage(user_id)
+        role = get_user_role(user_id)
+        g_used = usage["generations"]
+        g_total = ROLE_LIMITS[role]["generations"]
+
+        await message.answer(
+            f"❌ Вы исчерпали лимит <b>генераций логотипов</b>.\n\n"
+            f"🎨 Генераций: {g_used} / {g_total}\n"
+            f"ℹ️ Посмотреть лимиты можно через 'ℹ️ Информация'"
+        )
         return
 
     if is_generating(user_id):
