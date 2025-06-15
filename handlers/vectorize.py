@@ -17,7 +17,7 @@ async def ask_for_image(message: types.Message):
     user_id = message.from_user.id
     role = get_user_role(user_id)
     if ROLE_LIMITS[role]["vectorizations"] == 0:
-        await message.answer("❌ В вашей роли векторизация недоступна. Обновите роль через 'ℹ️ Информация'.")
+        await message.answer("❌ В вашей роли векторизация недоступна. Обновите роль.")
         return
     set_user_state(user_id, STATE_VECTORIZE)
     await message.answer("📤 Пришли изображение для векторизации.", reply_markup=get_back_keyboard())
