@@ -3,11 +3,12 @@ import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
-from aiogram.filters import CommandStart
-from aiogram.fsm.storage.memory import MemoryStorage  # <- ВАЖНО: добавьте это
+from aiogram.filters import CommandStart, Command
+from aiogram.fsm.storage.memory import MemoryStorage
 from config import TELEGRAM_BOT_TOKEN
 from handlers import start, info, prompt, generation, vectorize
 from utils.user_state import get_user_state, STATE_GENERATE, STATE_VECTORIZE, STATE_MENU
+from utils.user_roles import load_db
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("aiogram.event").setLevel(logging.DEBUG)
@@ -28,7 +29,9 @@ def is_vectorization_photo(message):
         and get_user_state(message.from_user.id) == STATE_VECTORIZE
     )
 
+# Регистрация хендлеров
 dp.message.register(start.start, CommandStart())
+dp.message.register(start.setrole_command, Command(commands=["setrole"]))
 dp.message.register(start.start, lambda m: m.text == "⬅️ В меню")
 dp.message.register(info.info, lambda m: m.text == "ℹ️ Информация")
 dp.message.register(prompt.prompt_for_idea, lambda m: m.text == "🎨 Генерация логотипа")
@@ -49,4 +52,5 @@ async def fallback_handler(message):
         await message.answer("❓ Непонятное состояние. Нажмите '⬅️ В меню'.")
 
 if __name__ == "__main__":
+    load_db()
     asyncio.run(dp.start_polling(bot))
