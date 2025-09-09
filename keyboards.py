@@ -5,7 +5,7 @@ def get_main_keyboard():
         keyboard=[
             [KeyboardButton(text="🎨 Генерация логотипа")],
             [KeyboardButton(text="🖼 Векторизация")],
-            [KeyboardButton(text="💎 Купить доступ")],
+            [KeyboardButton(text="💎 Купить доступ")],   # ← добавили кнопку входа к оплате
             [KeyboardButton(text="ℹ️ Информация")],
         ],
         resize_keyboard=True
@@ -19,7 +19,7 @@ def get_back_keyboard():
         resize_keyboard=True
     )
 
-# 🔑 Добавили сюда оплату
+# Inline-кнопка, которая откроет окно оплаты Stars
 def get_pay_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[[
