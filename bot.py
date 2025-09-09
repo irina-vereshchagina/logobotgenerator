@@ -50,3 +50,12 @@ async def fallback_handler(message):
 
 if __name__ == "__main__":
     asyncio.run(dp.start_polling(bot))
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+def get_pay_keyboard():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[
+            InlineKeyboardButton(text="Оплатить 500⭐", callback_data="pay_500")
+        ]]
+    )
+
