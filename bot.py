@@ -6,7 +6,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import CommandStart
 from aiogram.fsm.storage.memory import MemoryStorage  # <- ВАЖНО: добавьте это
 from config import TELEGRAM_BOT_TOKEN
-from handlers import start, info, prompt, generation, vectorize
+from handlers import start, info, prompt, generation, vectorize, payments
 from utils.user_state import get_user_state, STATE_GENERATE, STATE_VECTORIZE, STATE_MENU
 
 logging.basicConfig(level=logging.INFO)
@@ -35,7 +35,7 @@ dp.message.register(prompt.prompt_for_idea, lambda m: m.text == "🎨 Генер
 dp.message.register(vectorize.ask_for_image, lambda m: m.text == "🖼 Векторизация")
 dp.message.register(vectorize.handle_vectorization_image, is_vectorization_photo)
 dp.message.register(generation.handle_idea, is_generate_text)
-
+dp.include_router(payments.router)
 @dp.message()
 async def fallback_handler(message):
     state = get_user_state(message.from_user.id)
