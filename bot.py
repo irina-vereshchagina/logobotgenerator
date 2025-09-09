@@ -39,15 +39,15 @@ dp.message.register(vectorize.ask_for_image, lambda m: m.text == "🖼 Вект�
 dp.message.register(vectorize.handle_vectorization_image, is_vectorization_photo)
 dp.message.register(generation.handle_idea, is_generate_text)
 
-# --- показать кнопку оплаты при нажатии "💎 Купить доступ" (Reply-кнопка из меню) ---
-async def show_pay(message):
+# --- показать СПИСОК ТАРИФОВ при нажатии "💎 Купить доступ" ---
+async def show_plans(message):
     await message.answer(
-        "Чтобы продолжить, оплати 500⭐:",
-        reply_markup=get_pay_keyboard()
+        "Выберите тариф:",
+        reply_markup=get_plans_keyboard()  # 👈 вместо get_pay_keyboard()
     )
-dp.message.register(show_pay, lambda m: m.text == "💎 Купить доступ")
+dp.message.register(show_plans, lambda m: m.text == "💎 Купить доступ")
 
-# --- подключаем роутер оплат (обрабатывает нажатие inline-кнопки и сам платёж) ---
+# --- подключаем роутер оплат (choose_plan / pay_plan / successful_payment) ---
 dp.include_router(payments.router)
 
 # --- фолбек ---
