@@ -5,6 +5,7 @@ def get_main_keyboard():
         keyboard=[
             [KeyboardButton(text="🎨 Генерация логотипа")],
             [KeyboardButton(text="🖼 Векторизация")],
+            [KeyboardButton(text="💎 Купить доступ")],
             [KeyboardButton(text="ℹ️ Информация")],
         ],
         resize_keyboard=True
