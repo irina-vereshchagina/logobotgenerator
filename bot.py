@@ -8,7 +8,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import TELEGRAM_BOT_TOKEN
 from handlers import start, info, prompt, generation, vectorize, payments
-from keyboards import get_pay_keyboard
+from keyboards import get_plans_keyboard   # 👈 правильный импорт
 from utils.user_state import get_user_state, STATE_GENERATE, STATE_VECTORIZE, STATE_MENU
 
 logging.basicConfig(level=logging.INFO)
@@ -35,7 +35,7 @@ dp.message.register(start.start, CommandStart())
 dp.message.register(start.start, lambda m: m.text == "⬅️ В меню")
 dp.message.register(info.info, lambda m: m.text == "ℹ️ Информация")
 dp.message.register(prompt.prompt_for_idea, lambda m: m.text == "🎨 Генерация логотипа")
-dp.message.register(vectorize.ask_for_image, lambda m: m.text == "🖼 Векторизация")
+dp.message.register(vectorize.ask_for_image, lambda m: m.text == "🧹 Векторизовать изображение" or m.text == "🖼 Векторизация")
 dp.message.register(vectorize.handle_vectorization_image, is_vectorization_photo)
 dp.message.register(generation.handle_idea, is_generate_text)
 
@@ -43,11 +43,11 @@ dp.message.register(generation.handle_idea, is_generate_text)
 async def show_plans(message):
     await message.answer(
         "Выберите тариф:",
-        reply_markup=get_plans_keyboard()  # 👈 вместо get_pay_keyboard()
+        reply_markup=get_plans_keyboard()
     )
 dp.message.register(show_plans, lambda m: m.text == "💎 Купить доступ")
 
-# --- подключаем роутер оплат (choose_plan / pay_plan / successful_payment) ---
+# --- подключаем роутер оплат ---
 dp.include_router(payments.router)
 
 # --- фолбек ---
