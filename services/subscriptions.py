@@ -1,50 +1,49 @@
 import json
-from pathlib import Path
-from typing import Dict
+import os
+from config import PLAN_QUOTAS, FREE_GEN_TRIAL
 
-_DB = Path("subscriptions.json")
+DB_FILE = "subscriptions.json"
 
-def _load() -> Dict[str, dict]:
-    if _DB.exists():
-        return json.loads(_DB.read_text("utf-8"))
-    return {}
 
-def _save(data: Dict[str, dict]) -> None:
-    _DB.write_text(json.dumps(data, ensure_ascii=False, indent=2), "utf-8")
+def _load():
+    if not os.path.exists(DB_FILE):
+        return {}
+    with open(DB_FILE, "r", encoding="utf-8") as f:
+        try:
+            return json.load(f)
+        except Exception:
+            return {}
 
+
+def _save(data):
+    with open(DB_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+# 👇 бесплатные квоты при первом запуске
+def ensure_free_quota(user_id: int, free_gen: int = FREE_GEN_TRIAL, free_vec: int = 0):
+    """
+    Выдать стартовые бесплатные квоты, если пользователя ещё нет в БД.
+    Возвращает текущие квоты пользователя.
+    """
+    data = _load()
+    u = str(user_id)
+    if u not in data:
+        data[u] = {
+            "gen_left": int(free_gen),
+            "vec_left": int(free_vec),
+            "history": [{"plan": "free_trial", "gen": int(free_gen), "vec": int(free_vec)}],
+        }
+        _save(data)
+    cur = data[u]
+    return {"gen_left": int(cur.get("gen_left", 0)), "vec_left": int(cur.get("vec_left", 0))}
+
+
+# добавить тариф пользователю (после покупки)
 def grant_plan(user_id: int, plan_key: str, gen: int, vec: int):
     data = _load()
     u = str(user_id)
-    cur = data.get(u, {"gen_left": 0, "vec_left": 0, "history": []})
-    cur["gen_left"] = int(cur.get("gen_left", 0)) + int(gen)
-    cur["vec_left"] = int(cur.get("vec_left", 0)) + int(vec)
-    cur["history"].append({"plan": plan_key, "gen": gen, "vec": vec})
-    data[u] = cur
-    _save(data)
-
-def get_quotas(user_id: int) -> Dict[str, int]:
-    data = _load()
-    cur = data.get(str(user_id), {"gen_left": 0, "vec_left": 0})
-    return {"gen_left": int(cur.get("gen_left", 0)), "vec_left": int(cur.get("vec_left", 0))}
-
-def dec_gen(user_id: int) -> bool:
-    data = _load()
-    u = str(user_id)
-    cur = data.get(u, {"gen_left": 0, "vec_left": 0})
-    if cur.get("gen_left", 0) > 0:
-        cur["gen_left"] -= 1
-        data[u] = cur
-        _save(data)
-        return True
-    return False
-
-def dec_vec(user_id: int) -> bool:
-    data = _load()
-    u = str(user_id)
-    cur = data.get(u, {"gen_left": 0, "vec_left": 0})
-    if cur.get("vec_left", 0) > 0:
-        cur["vec_left"] -= 1
-        data[u] = cur
-        _save(data)
-        return True
-    return False
+    if u not in data:
+        data[u] = {"gen_left": 0, "vec_left": 0, "history": []}
+    data[u]["gen_left"] = int(data[u].get("gen_left", 0)) + int(gen)
+    data[u]["vec_left"] = int(data[u].g_]()
