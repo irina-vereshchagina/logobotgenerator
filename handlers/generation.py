@@ -6,12 +6,13 @@ from services.logo_generator import generate_image
 from aiogram.types import BufferedInputFile
 import logging
 
-# 👇 добавили импорт для квот
-from services.subscriptions import get_quotas, dec_gen
+# ✅ квоты и бесплатный старт
+from config import FREE_GEN_TRIAL
+from services.subscriptions import get_quotas, dec_gen, ensure_free_quota
 
 
 async def handle_idea(message: types.Message, state: FSMContext):
-    # Получаем текущее состояние FSM
+    # Текущее состояние FSM
     state_now = await state.get_state()
     if state_now != GenerationStates.waiting_for_idea.state:
         print("[DEBUG] Пользователь не в состоянии ожидания идеи, игнорируем сообщение")
@@ -22,6 +23,10 @@ async def handle_idea(message: types.Message, state: FSMContext):
     if not message.text:
         await message.answer("❗️Ожидается текст с идеей логотипа. Пожалуйста, напишите словами.")
         return
+
+    # 👉 0) Выдать бесплатные квоты, если у пользователя ещё нет записи
+    #    (5 бесплатных генераций, 0 векторизаций)
+    ensure_free_quota(user_id, free_gen=FREE_GEN_TRIAL, free_vec=0)
 
     # 1) Проверка квот (вне блокировки)
     q = get_quotas(user_id)
@@ -34,7 +39,7 @@ async def handle_idea(message: types.Message, state: FSMContext):
         return
 
     async with single_user_lock(user_id):
-        # 2) Проверка квот повторно внутри блокировки (на случай гонки)
+        # 2) Повторная проверка квот внутри блокировки (на случай гонки)
         q = get_quotas(user_id)
         if q["gen_left"] <= 0:
             await message.answer("У тебя закончились генерации. Нажми «💎 Купить доступ».")
@@ -50,7 +55,7 @@ async def handle_idea(message: types.Message, state: FSMContext):
             input_file = BufferedInputFile(file=image.read(), filename="logo.png")
             await message.answer_photo(photo=input_file, caption="Вот логотип по твоей идее!")
 
-            # 3) Списываем квоту только после успешной генерации
+            # 3) Списываем квоту ТОЛЬКО после успешной генерации
             if not dec_gen(user_id):
                 await message.answer("⚠️ Не удалось списать генерацию с баланса. Напиши в поддержку.")
             else:
