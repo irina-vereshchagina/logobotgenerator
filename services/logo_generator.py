@@ -1,40 +1,44 @@
-import requests
-from io import BytesIO
+# services/logo_generator.py
+import os
+import io
+import base64
 import asyncio
-from config import USE_PLACEHOLDER, OPENAI_API_KEY
+from dotenv import load_dotenv
 
-async def generate_image(prompt: str) -> BytesIO:
-    if USE_PLACEHOLDER:
-        await asyncio.sleep(2)
-        url = "https://placehold.co/1024x1024/png?text=Logo"
-        response = requests.get(url)
-        response.raise_for_status()
-        return BytesIO(response.content)
+load_dotenv()
 
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+IMAGE_SIZE = os.getenv("IMAGE_SIZE", "1024x1024")
+
+
+def _ensure_api_key():
+    if not OPENAI_API_KEY:
+        raise RuntimeError("OPENAI_API_KEY не задан в .env")
+
+
+def _gen_sync_openai(prompt: str) -> io.BytesIO:
     from openai import OpenAI
     client = OpenAI(api_key=OPENAI_API_KEY)
 
-    chat = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "Ты создаешь промпт для генерации логотипа через DALL·E 3."},
-            {"role": "user", "content": prompt}
-        ]
+    style = (
+        "Create a clean, vector-like logo. "
+        "Flat, minimal, high contrast, centered composition. "
+        "No background clutter."
     )
 
-    prompt_dalle = chat.choices[0].message.content.strip()
-
-    image_response = client.images.generate(
-        model="dall-e-3",
-        prompt=prompt_dalle,
+    resp = client.images.generate(
+        model="gpt-image-1",
+        prompt=f"{style}\nLogo idea: {prompt}",
+        size=IMAGE_SIZE,
+        background="transparent",
         n=1,
-        size="1024x1024",
-        quality="standard",
-        style="vivid",
     )
 
-    image_url = image_response.data[0].url
-    img_data = requests.get(image_url)
-    img_data.raise_for_status()
+    b64 = resp.data[0].b64_json
+    return io.BytesIO(base64.b64decode(b64))
 
-    return BytesIO(img_data.content)
+
+async def generate_image(prompt: str) -> io.BytesIO:
+    """Асинхронная обёртка для генерации логотипа через OpenAI."""
+    _ensure_api_key()
+    return await asyncio.to_thread(_gen_sync_openai, prompt)
