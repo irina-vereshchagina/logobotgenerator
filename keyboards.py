@@ -1,11 +1,12 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from config import PLAN_PRICES, PLAN_TITLES  # 👈 импорт вынесен в начало
 
 def get_main_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🎨 Генерация логотипа")],
             [KeyboardButton(text="🖼 Векторизация")],
-            [KeyboardButton(text="💎 Купить доступ")],   # ← добавили кнопку входа к оплате
+            [KeyboardButton(text="💎 Купить доступ")],   # кнопка покупки
             [KeyboardButton(text="ℹ️ Информация")],
         ],
         resize_keyboard=True
@@ -18,11 +19,9 @@ def get_back_keyboard():
         ],
         resize_keyboard=True
     )
+
 # Список тарифов для выбора
 def get_plans_keyboard():
-    # keyboards.py (добавь этот импорт в начало файла)
-from config import PLAN_PRICES, PLAN_TITLES
-
     start = InlineKeyboardButton(
         text=f"Старт — {PLAN_PRICES['start']}⭐",
         callback_data="choose_plan:start"
