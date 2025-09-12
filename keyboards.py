@@ -50,7 +50,6 @@ def get_pay_keyboard_for(plan_key: str, amount: int):
             )
         ]]
     )
-____________
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from config import PLAN_PRICES
 
