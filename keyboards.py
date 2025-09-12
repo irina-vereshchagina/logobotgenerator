@@ -20,6 +20,9 @@ def get_back_keyboard():
     )
 # Список тарифов для выбора
 def get_plans_keyboard():
+    # keyboards.py (добавь этот импорт в начало файла)
+from config import PLAN_PRICES, PLAN_TITLES
+
     start = InlineKeyboardButton(
         text=f"Старт — {PLAN_PRICES['start']}⭐",
         callback_data="choose_plan:start"
