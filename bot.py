@@ -1,67 +1,38 @@
-import logging
-import asyncio
-from aiogram import Bot, Dispatcher
-from aiogram.enums import ParseMode
-from aiogram.client.default import DefaultBotProperties
-from aiogram.filters import CommandStart
-from aiogram.fsm.storage.memory import MemoryStorage
+import os
+from dotenv import load_dotenv
 
-from config import TELEGRAM_BOT_TOKEN
-from handlers import start, info, prompt, generation, vectorize, payments
-from keyboards import get_plans_keyboard   # 👈 правильный импорт
-from utils.user_state import get_user_state, STATE_GENERATE, STATE_VECTORIZE, STATE_MENU
+# Загружаем переменные окружения из .env
+load_dotenv()
 
-logging.basicConfig(level=logging.INFO)
-logging.getLogger("aiogram.event").setLevel(logging.DEBUG)
+# --- Основные ключи ---
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-defaults = DefaultBotProperties(parse_mode=ParseMode.HTML)
-bot = Bot(token=TELEGRAM_BOT_TOKEN, default=defaults)
-dp = Dispatcher(storage=MemoryStorage())
+# Для векторизации (если используешь внешний сервис)
+VECTORIZE_USER = os.getenv("VECTORIZE_USER")
+VECTORIZE_PASS = os.getenv("VECTORIZE_PASS")
 
-def is_generate_text(message):
-    return (
-        message.text and not message.text.startswith("/")
-        and get_user_state(message.from_user.id) == STATE_GENERATE
-    )
+# --- Настройки квот ---
+# Сколько бесплатных генераций выдать новому пользователю
+FREE_GEN_TRIAL = int(os.getenv("FREE_GEN_TRIAL", "5"))
 
-def is_vectorization_photo(message):
-    return (
-        message.photo
-        and get_user_state(message.from_user.id) == STATE_VECTORIZE
-    )
+# Цены тарифов в Telegram Stars (или другой валюте, если поменяешь)
+PLAN_PRICES = {
+    "start": int(os.getenv("PRICE_START", "99")),
+    "standard": int(os.getenv("PRICE_STANDARD", "249")),
+    "pro": int(os.getenv("PRICE_PRO", "499")),
+}
 
-# --- твои текущие хэндлеры ---
-dp.message.register(start.start, CommandStart())
-dp.message.register(start.start, lambda m: m.text == "⬅️ В меню")
-dp.message.register(info.info, lambda m: m.text == "ℹ️ Информация")
-dp.message.register(prompt.prompt_for_idea, lambda m: m.text == "🎨 Генерация логотипа")
-dp.message.register(vectorize.ask_for_image, lambda m: m.text == "🧹 Векторизовать изображение" or m.text == "🖼 Векторизация")
-dp.message.register(vectorize.handle_vectorization_image, is_vectorization_photo)
-dp.message.register(generation.handle_idea, is_generate_text)
+# Отображаемые названия тарифов
+PLAN_TITLES = {
+    "start": "Старт",
+    "standard": "Стандарт",
+    "pro": "Профи",
+}
 
-# --- показать СПИСОК ТАРИФОВ при нажатии "💎 Купить доступ" ---
-async def show_plans(message):
-    await message.answer(
-        "Выберите тариф:",
-        reply_markup=get_plans_keyboard()
-    )
-dp.message.register(show_plans, lambda m: m.text == "💎 Купить доступ")
-
-# --- подключаем роутер оплат ---
-dp.include_router(payments.router)
-
-# --- фолбек ---
-@dp.message()
-async def fallback_handler(message):
-    state = get_user_state(message.from_user.id)
-    if state == STATE_MENU:
-        await message.answer("❗️Вы сейчас в главном меню. Пожалуйста, выберите действие кнопкой ниже.")
-    elif state == STATE_GENERATE:
-        await message.answer("❗️Ожидается текстовая идея логотипа.")
-    elif state == STATE_VECTORIZE:
-        await message.answer("❗️Ожидается изображение (фото) для векторизации.")
-    else:
-        await message.answer("❓ Непонятное состояние. Нажмите '⬅️ В меню'.")
-
-if __name__ == "__main__":
-    asyncio.run(dp.start_polling(bot))
+# Сколько квот выдаётся по каждому тарифу
+PLAN_QUOTAS = {
+    "start": {"gen": int(os.getenv("QUOTA_START_GEN", "20")), "vec": int(os.getenv("QUOTA_START_VEC", "2"))},
+    "standard": {"gen": int(os.getenv("QUOTA_STANDARD_GEN", "60")), "vec": int(os.getenv("QUOTA_STANDARD_VEC", "6"))},
+    "pro": {"gen": int(os.getenv("QUOTA_PRO_GEN", "150")), "vec": int(os.getenv("QUOTA_PRO_VEC", "20"))},
+}
