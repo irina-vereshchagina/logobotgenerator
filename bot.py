@@ -1,61 +1,53 @@
-import logging
 import asyncio
-from aiogram import Bot, Dispatcher
+import logging
+from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
-from aiogram.filters import CommandStart
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import TELEGRAM_BOT_TOKEN
-from handlers import start, info, prompt, generation, vectorize
+from handlers.start import router as start_router
+from handlers.info import router as info_router
+from handlers.prompt import router as prompt_router
+from handlers.generation import router as generation_router
+from handlers.vectorize import router as vectorize_router
 from utils.user_state import get_user_state, STATE_GENERATE, STATE_VECTORIZE, STATE_MENU
 
-
 logging.basicConfig(level=logging.INFO)
-logging.getLogger("aiogram.event").setLevel(logging.DEBUG)
+logging.getLogger("aiogram.event").setLevel(logging.INFO)
 
-defaults = DefaultBotProperties(parse_mode=ParseMode.HTML)
-bot = Bot(token=TELEGRAM_BOT_TOKEN, default=defaults)
-dp = Dispatcher(storage=MemoryStorage())
+async def main():
+    if not TELEGRAM_BOT_TOKEN:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN is not set in .env")
 
-
-def is_generate_text(message):
-    return (
-        message.text
-        and not message.text.startswith("/")
-        and get_user_state(message.from_user.id) == STATE_GENERATE
+    bot = Bot(
+        token=TELEGRAM_BOT_TOKEN,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML)
     )
+    dp = Dispatcher(storage=MemoryStorage())
 
+    # Подключаем роутеры с хендлерами
+    dp.include_router(start_router)
+    dp.include_router(info_router)
+    dp.include_router(prompt_router)
+    dp.include_router(generation_router)
+    dp.include_router(vectorize_router)
 
-def is_vectorization_photo(message):
-    return (
-        message.photo
-        and get_user_state(message.from_user.id) == STATE_VECTORIZE
-    )
+    # Фолбэк-хендлер для нераспознанных сообщений
+    @dp.message()
+    async def fallback_handler(message: types.Message):
+        state = get_user_state(message.from_user.id)
+        if state == STATE_MENU:
+            await message.answer("❗️Вы сейчас в главном меню. Пожалуйста, выберите действие кнопкой ниже.")
+        elif state == STATE_GENERATE:
+            await message.answer("❗️Ожидается текстовая идея логотипа.")
+        elif state == STATE_VECTORIZE:
+            await message.answer("❗️Ожидается изображение (фото) для векторизации.")
+        else:
+            await message.answer("❓ Непонятное состояние. Нажмите '⬅️ В меню'.")
 
-
-# Регистрация хендлеров
-dp.message.register(start.start, CommandStart())
-dp.message.register(start.start, lambda m: m.text == "⬅️ В меню")
-dp.message.register(info.info, lambda m: m.text == "ℹ️ Информация")
-dp.message.register(prompt.prompt_for_idea, lambda m: m.text == "🎨 Генерация логотипа")
-dp.message.register(vectorize.ask_for_image, lambda m: m.text == "🖼 Векторизация")
-dp.message.register(vectorize.handle_vectorization_image, is_vectorization_photo)
-dp.message.register(generation.handle_idea, is_generate_text)
-
-
-@dp.message()
-async def fallback_handler(message):
-    state = get_user_state(message.from_user.id)
-    if state == STATE_MENU:
-        await message.answer("❗️Вы сейчас в главном меню. Пожалуйста, выберите действие кнопкой ниже.")
-    elif state == STATE_GENERATE:
-        await message.answer("❗️Ожидается текстовая идея логотипа.")
-    elif state == STATE_VECTORIZE:
-        await message.answer("❗️Ожидается изображение (фото) для векторизации.")
-    else:
-        await message.answer("❓ Непонятное состояние. Нажмите '⬅️ В меню'.")
-
+    # Запуск бота
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(dp.start_polling(bot))
+    asyncio.run(main())
