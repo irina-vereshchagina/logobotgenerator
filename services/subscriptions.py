@@ -1,12 +1,9 @@
-# services/subscriptions.py
 import json
 import os
 from typing import Dict, Any
-
 from config import PLAN_QUOTAS, FREE_GEN_TRIAL
 
 DB_FILE = "subscriptions.json"
-
 
 def _load() -> Dict[str, Any]:
     if not os.path.exists(DB_FILE):
@@ -17,28 +14,24 @@ def _load() -> Dict[str, Any]:
     except Exception:
         return {}
 
-
 def _save(data: Dict[str, Any]) -> None:
     with open(DB_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-
 def ensure_free_quota(user_id: int, free_gen: int = FREE_GEN_TRIAL, free_vec: int = 0) -> Dict[str, int]:
-    """
-    Выдать стартовые бесплатные квоты, если пользователя ещё нет в "БД".
-    """
+    """Выдать стартовые бесплатные квоты, если пользователя ещё нет в 'БД'."""
     data = _load()
     u = str(user_id)
     if u not in data:
         data[u] = {
+            "plan": "free",
             "gen_left": int(free_gen),
             "vec_left": int(free_vec),
-            "history": [{"plan": "free_trial", "gen": int(free_gen), "vec": int(free_vec)}],
+            "history": [{"plan": "free", "gen": int(free_gen), "vec": int(free_vec)}],
         }
         _save(data)
     cur = data[u]
     return {"gen_left": int(cur.get("gen_left", 0)), "vec_left": int(cur.get("vec_left", 0))}
-
 
 def get_quotas(user_id: int) -> Dict[str, int]:
     data = _load()
@@ -46,25 +39,23 @@ def get_quotas(user_id: int) -> Dict[str, int]:
     cur = data.get(u, {})
     return {"gen_left": int(cur.get("gen_left", 0)), "vec_left": int(cur.get("vec_left", 0))}
 
-
-def grant_plan(user_id: int, plan_key: str, gen: int, vec: int) -> None:
-    """
-    Начислить квоты после оплаты тарифа.
-    """
+def set_plan(user_id: int, plan_key: str) -> None:
+    """Назначить тариф пользователю."""
+    if plan_key not in PLAN_QUOTAS:
+        raise ValueError(f"Неизвестный план: {plan_key}")
+    quotas = PLAN_QUOTAS[plan_key]
     data = _load()
     u = str(user_id)
-    if u not in data:
-        data[u] = {"gen_left": 0, "vec_left": 0, "history": []}
-    data[u]["gen_left"] = int(data[u].get("gen_left", 0)) + int(gen)
-    data[u]["vec_left"] = int(data[u].get("vec_left", 0)) + int(vec)
-    data[u].setdefault("history", []).append({"plan": plan_key, "gen": int(gen), "vec": int(vec)})
+    data[u] = {
+        "plan": plan_key,
+        "gen_left": int(quotas["gen"]),
+        "vec_left": int(quotas["vec"]),
+        "history": [{"plan": plan_key, "gen": int(quotas["gen"]), "vec": int(quotas["vec"])}],
+    }
     _save(data)
 
-
 def dec_gen(user_id: int) -> bool:
-    """
-    Списать одну генерацию. Возвращает True при успехе.
-    """
+    """Списать одну генерацию."""
     data = _load()
     u = str(user_id)
     cur = data.get(u)
@@ -78,11 +69,8 @@ def dec_gen(user_id: int) -> bool:
     _save(data)
     return True
 
-
 def dec_vec(user_id: int) -> bool:
-    """
-    Списать одну векторизацию. Возвращает True при успехе.
-    """
+    """Списать одну векторизацию."""
     data = _load()
     u = str(user_id)
     cur = data.get(u)
