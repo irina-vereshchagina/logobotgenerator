@@ -1,7 +1,10 @@
-from aiogram import types
+from aiogram import Router, types, F
 from keyboards import get_main_keyboard
 from utils.user_state import set_user_state, STATE_MENU
 
+router = Router()
+
+@router.message(F.text == "ℹ️ Информация")
 async def info(message: types.Message):
     user_id = message.from_user.id
     set_user_state(user_id, STATE_MENU)
