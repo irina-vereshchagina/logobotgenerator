@@ -1,34 +1,31 @@
-from aiogram import types
+from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
-from utils.states import GenerationStates
-from utils.user_state import single_user_lock, is_generating, set_generating
-from services.logo_generator import generate_image
 from aiogram.types import BufferedInputFile
 import logging
 
-# ✅ квоты и бесплатный старт
-from config import FREE_GEN_TRIAL
+from utils.states import GenerationStates
+from utils.user_state import single_user_lock, is_generating, set_generating
+from services.logo_generator import generate_image
 from services.subscriptions import get_quotas, dec_gen, ensure_free_quota
+from config import FREE_GEN_TRIAL
 
+router = Router()
 
+@router.message(F.text & ~F.text.startswith("/"))
 async def handle_idea(message: types.Message, state: FSMContext):
-    # Текущее состояние FSM
-    state_now = await state.get_state()
-    if state_now != GenerationStates.waiting_for_idea.state:
-        print("[DEBUG] Пользователь не в состоянии ожидания идеи, игнорируем сообщение")
+    # обрабатываем только во время ожидания идеи
+    if await state.get_state() != GenerationStates.waiting_for_idea.state:
         return
 
     user_id = message.from_user.id
-
     if not message.text:
         await message.answer("❗️Ожидается текст с идеей логотипа. Пожалуйста, напишите словами.")
         return
 
-    # 👉 0) Выдать бесплатные квоты, если у пользователя ещё нет записи
-    #    (5 бесплатных генераций, 0 векторизаций)
+    # выдаём стартовые квоты, если новый пользователь
     ensure_free_quota(user_id, free_gen=FREE_GEN_TRIAL, free_vec=0)
 
-    # 1) Проверка квот (вне блокировки)
+    # проверка квот
     q = get_quotas(user_id)
     if q["gen_left"] <= 0:
         await message.answer("У тебя закончились генерации. Нажми «💎 Купить доступ» и пополни тариф.")
@@ -39,7 +36,7 @@ async def handle_idea(message: types.Message, state: FSMContext):
         return
 
     async with single_user_lock(user_id):
-        # 2) Повторная проверка квот внутри блокировки (на случай гонки)
+        # повторная проверка внутри блокировки
         q = get_quotas(user_id)
         if q["gen_left"] <= 0:
             await message.answer("У тебя закончились генерации. Нажми «💎 Купить доступ».")
@@ -49,23 +46,14 @@ async def handle_idea(message: types.Message, state: FSMContext):
         await message.answer("Генерирую логотип, подожди немного...")
 
         try:
-            # Генерация
             image = await generate_image(message.text)
             image.seek(0)
             input_file = BufferedInputFile(file=image.read(), filename="logo.png")
             await message.answer_photo(photo=input_file, caption="Вот логотип по твоей идее!")
 
-            # 3) Списываем квоту ТОЛЬКО после успешной генерации
+            # списываем квоту только после успеха
             if not dec_gen(user_id):
                 await message.answer("⚠️ Не удалось списать генерацию с баланса. Напиши в поддержку.")
-            else:
-                left = get_quotas(user_id)
-                await message.answer(
-                    f"✅ Генерация выполнена.\n"
-                    f"Осталось: {left['gen_left']} генераций, {left['vec_left']} векторизаций.\n"
-                    f"💡 Пришли ещё идею или нажми '⬅️ В меню'."
-                )
-
         except Exception as e:
             logging.exception("Ошибка при генерации")
             await message.answer(f"Произошла ошибка: {e}")
