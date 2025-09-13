@@ -1,3 +1,4 @@
+# handlers/start.py
 from aiogram import Router, types, F
 from aiogram.filters import CommandStart
 from keyboards import get_main_keyboard
@@ -7,7 +8,7 @@ router = Router()
 
 @router.message(CommandStart())
 @router.message(F.text == "⬅️ В меню")
-async def start_handler(message: types.Message):
+async def start(message: types.Message):
     user_id = message.from_user.id
     set_user_state(user_id, STATE_MENU)
     await message.answer(
